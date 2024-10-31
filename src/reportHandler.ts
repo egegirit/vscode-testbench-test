@@ -8,8 +8,8 @@ import {
     findProjectKeyOfCycleElement,
     ProjectManagementTreeDataProvider,
 } from "./projectManagementTreeView";
-import { connection } from "./extension";
 import * as tb2robotLib from "./testbench2robotframeworkLib";
+import { connection, baseKey, lastGeneratedReportParams } from "./extension";
 
 /**
  * Prompt the user to select the export report method in quick pick format (Execution based or Specification based).
@@ -81,9 +81,9 @@ export async function fetchZipFile(
     baseKey: string,
     projectKey: string,
     cycleKey: string,
-    progress: vscode.Progress<{ message?: string; increment?: number }>,
     folderNameToDownloadReport: string,
     requestParams?: types.OptionalJobIDRequestParameter,
+    progress?: vscode.Progress<{ message?: string; increment?: number }>,
     cancellationToken?: vscode.CancellationToken
 ): Promise<string | undefined> {
     try {
@@ -412,11 +412,16 @@ export function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function handleExecutionError(workingDirectoryFullPath: string, isExecutionSuccessfull: boolean): boolean {
+async function handleExecutionError(
+    workingDirectoryFullPath: string,
+    isExecutionSuccessfull: boolean,
+    downloadedReportZipFilePath: string
+): Promise<boolean> {
     if (!isExecutionSuccessfull) {
-        deleteConfigurationFile(getConfigurationFilePath(workingDirectoryFullPath)); // Delete created json config file after usage
+        await deleteConfigurationFile(getConfigurationFilePath(workingDirectoryFullPath)); // Delete created json config file after usage
+        await removeReportZipFile(downloadedReportZipFilePath);
         console.error(`Test generation failed.`);
-        vscode.window.showErrorMessage(`Test generation failed.`);
+        // vscode.window.showErrorMessage(`Test generation failed.`);
     }
     return isExecutionSuccessfull;
 }
@@ -564,9 +569,9 @@ export async function generateTestsWithTestBenchToRobotFramework(
                     baseKey,
                     projectKey,
                     cycleKey,
-                    progress,
                     workingDirectory,
                     cycleStructureOptionsRequestParameter,
+                    progress,
                     cancellationToken // Pass the cancellationToken here
                 );
 
@@ -581,13 +586,8 @@ export async function generateTestsWithTestBenchToRobotFramework(
                         message: `Generating test cases with testbench2robotframework.`,
                     });
                 }
+
                 // @@ Start of testbench2robotframework library
-
-                const robotOutDirectory = `output`;
-                const generatedRobotTestsDirectory = `Generated`;
-                const robotResultXMLFile = `output/output.xml`;
-                const reportWithResultsZip = `ReportWithResults.zip`;
-
                 const config = vscode.workspace.getConfiguration(baseKey);
                 const workspacePath = config.get<string>("workspaceLocation");
                 const workingDirectoryFullPath = path.join(workspacePath!, workingDirectory);
@@ -616,49 +616,24 @@ export async function generateTestsWithTestBenchToRobotFramework(
                     );
                 }
 
-                if (!handleExecutionError(workingDirectoryFullPath, isExecutionSuccessfull)) {
+                if (
+                    !await handleExecutionError(workingDirectoryFullPath, isExecutionSuccessfull, downloadedReportZipFilePath)
+                ) {
                     return;
                 }
                 console.log(`Robot write executed.`);
 
-                if (progress) {
-                    progress.report({
-                        increment: 20,
-                        message: `Executing test cases.`,
-                    });
-                }
+                // Set the last generated report parameters so that the read command can fetch a new report with these parameters.
+                lastGeneratedReportParams.UID = UIDofSelectedElement;
+                lastGeneratedReportParams.projectKey = projectKey;
+                lastGeneratedReportParams.cycleKey = cycleKey;
+                lastGeneratedReportParams.executionBased = executionBased;
 
-                isExecutionSuccessfull = await tb2robotLib.robotGenerateXMLResults(
-                    workingDirectoryFullPath,
-                    robotOutDirectory,
-                    generatedRobotTestsDirectory
-                );
+                // Delete created json config file after usage
+                await deleteConfigurationFile(getConfigurationFilePath(workingDirectoryFullPath));
 
-                if (!handleExecutionError(workingDirectoryFullPath, isExecutionSuccessfull)) {
-                    return;
-                }
-                console.log(`Robot Tests executed.`);
-
-                if (progress) {
-                    progress.report({
-                        increment: 20,
-                        message: `Reading test results.`,
-                    });
-                }
-
-                isExecutionSuccessfull = await tb2robotLib.startTb2robotRead(
-                    context,
-                    workingDirectoryFullPath,
-                    path.join(workingDirectoryFullPath, robotResultXMLFile),
-                    downloadedReportZipFilePath,
-                    path.join(workingDirectoryFullPath, reportWithResultsZip)
-                );
-                if (!handleExecutionError(workingDirectoryFullPath, isExecutionSuccessfull)) {
-                    return;
-                }
-                console.log(`tb2robot read executed.`);
-
-                deleteConfigurationFile(getConfigurationFilePath(workingDirectoryFullPath)); // Delete created json config file after usage
+                // Remove the downloaded report zip file after usage
+                await removeReportZipFile(downloadedReportZipFilePath);
 
                 vscode.window.showInformationMessage(`Test generation done.`);
             } catch (error: any) {
@@ -676,13 +651,230 @@ export async function generateTestsWithTestBenchToRobotFramework(
 }
 
 /**
+ * Tries to find 'output.xml' recursively in the current workspace directory.
+ * If not found, returns the location of the currently opened file.
+ * @returns {Promise<string | undefined>} Full path of 'output.xml' or the currently opened file's location.
+ */
+export async function findOutputXml(): Promise<string | undefined> {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showWarningMessage("No workspace folder is open.");
+        return undefined;
+    }
+
+    const rootFolder = workspaceFolders[0].uri.fsPath;
+
+    // Search recursively for 'output.xml'
+    const outputFilePath = findFileRecursively(rootFolder, "output.xml");
+
+    if (outputFilePath) {
+        return outputFilePath;
+    }
+
+    // Fallback: return the path of the currently opened file if no 'output.xml' is found
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor) {
+        return activeEditor.document.uri.fsPath;
+    }
+
+    vscode.window.showWarningMessage("No output.xml file found and no file is currently open.");
+    return undefined;
+}
+
+/**
+ * Removes the zip file.
+ * @param downloadedReportZipFilePath The path of the report zip file.
+ */
+async function removeReportZipFile(downloadedReportZipFilePath: string): Promise<void> {
+    try {
+        // Check if the file exists
+        if (!fs.existsSync(downloadedReportZipFilePath)) {
+            throw new Error("File does not exist at the given path.");
+        }
+
+        // Extract the file name and extension from the path
+        const fileName = path.basename(downloadedReportZipFilePath);
+        const fileExtension = path.extname(downloadedReportZipFilePath);
+
+        // Check if the file name starts with "cycle-"
+        if (!fileName.startsWith("cycle-")) {
+            throw new Error("File name does not start with the required prefix 'cycle-'.");
+        }
+
+        // Check if the file is a zip file
+        if (fileExtension !== ".zip") {
+            throw new Error("File is not a zip file.");
+        }
+
+        // Delete the file
+        await fs.promises.unlink(downloadedReportZipFilePath);
+        console.log(`File ${fileName} successfully removed.`);
+    } catch (error) {
+        console.error(`Error removing the file: ${(error as Error).message}`);
+    }
+}
+
+/**
+ * Recursively searches for a file within a directory.
+ * @param {string} dir - The directory to search in.
+ * @param {string} fileName - The name of the file to search for.
+ * @returns {string | undefined} The full path of the file if found, otherwise undefined.
+ */
+function findFileRecursively(dir: string, fileName: string): string | undefined {
+    const files = fs.readdirSync(dir);
+
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+
+        if (stat.isDirectory()) {
+            // Recursively search in subdirectories
+            const result = findFileRecursively(fullPath, fileName);
+            if (result) {
+                return result;
+            }
+        } else if (stat.isFile() && file === fileName) {
+            return fullPath;
+        }
+    }
+
+    return undefined;
+}
+
+async function chooseRobotXMLFile(workingDirectoryFullPath: string): Promise<string | undefined> {
+    // Open file selection dialog, filtered for XML files
+    const selectedFiles = await vscode.window.showOpenDialog({
+        defaultUri: vscode.Uri.file(workingDirectoryFullPath),
+        canSelectFiles: true,
+        canSelectMany: false,
+        title: "Select Output XML File",
+        openLabel: "Select Output XML File",
+        filters: { "XML Files": ["xml"] },
+    });
+
+    // Return the selected file path if a file was chosen
+    if (selectedFiles && selectedFiles.length > 0) {
+        return selectedFiles[0].fsPath;
+    }
+    return undefined;
+}
+
+async function chooseReportWithouResultsZipFile(workingDirectoryFullPath: string): Promise<string | undefined> {
+    // Open file selection dialog, filtered for XML files
+    const selectedFiles = await vscode.window.showOpenDialog({
+        defaultUri: vscode.Uri.file(workingDirectoryFullPath),
+        title: "Select Report Zip File",
+        openLabel: "Select Report Zip File",
+        canSelectFiles: true,
+        canSelectMany: false,
+        filters: { "Zip Files": ["zip"] },
+    });
+
+    // Return the selected file path if a file was chosen
+    if (selectedFiles && selectedFiles.length > 0) {
+        return selectedFiles[0].fsPath;
+    }
+    return undefined;
+}
+
+export async function readTestResultsAndCreateReportWithResults(
+    context: vscode.ExtensionContext,
+    workingDirectory: string,
+    reportWithResultsZip: string = `ReportWithResults_${new Date().getTime()}.zip` // Add a timestamp to the result file
+) {
+    const config = vscode.workspace.getConfiguration(baseKey);
+    const workspacePath = config.get<string>("workspaceLocation");
+    const workingDirectoryFullPath = path.join(workspacePath!, workingDirectory);
+
+    // Select output XML file
+    /*
+    Use this code if you want to automate finding the output.xml
+    let outputXMLPath = await findOutputXml();
+    let robotResultXMLFile = outputXMLPath ? outputXMLPath : await chooseRobotXMLFile();
+    */
+    let robotResultXMLFile = await chooseRobotXMLFile(workingDirectoryFullPath);
+    if (!robotResultXMLFile) {
+        console.error(`No XML file selected.`);
+        vscode.window.showErrorMessage(`No XML file selected.`);
+        return;
+    }
+
+    const cycleStructureOptionsRequestParameter: types.OptionalJobIDRequestParameter = {
+        basedOnExecution: lastGeneratedReportParams.executionBased,
+        treeRootUID: lastGeneratedReportParams.UID,
+    };
+
+    if (
+        !(
+            lastGeneratedReportParams.executionBased !== undefined &&
+            lastGeneratedReportParams.projectKey !== undefined &&
+            lastGeneratedReportParams.cycleKey !== undefined &&
+            lastGeneratedReportParams.UID !== undefined
+        )
+    ) {
+        console.log(`Last generated report parameters are missing.`);
+        return;
+    }
+
+    // Fetch the ZIP file from the server
+    let downloadedReportZipFilePath = await fetchZipFile(
+        baseKey,
+        lastGeneratedReportParams.projectKey,
+        lastGeneratedReportParams.cycleKey,
+        workingDirectory,
+        cycleStructureOptionsRequestParameter
+    );
+
+    let reportWithResultsZipFilePath =
+        downloadedReportZipFilePath !== null
+            ? downloadedReportZipFilePath
+            : await chooseReportWithouResultsZipFile(workingDirectoryFullPath);
+    if (!reportWithResultsZipFilePath) {
+        console.error(`No report file selected.`);
+        vscode.window.showErrorMessage(`No report file selected.`);
+        return;
+    }
+
+    // Create configuration json object called testbench2robotframeworkConfig.json
+    let isExecutionSuccessfull;
+    const tb2robotConfigFilePath = await saveTestbench2RobotConfigurationAsJson(baseKey, workingDirectoryFullPath);
+    if (!tb2robotConfigFilePath) {
+        isExecutionSuccessfull = await tb2robotLib.startTb2robotRead(
+            context,
+            workingDirectoryFullPath,
+            robotResultXMLFile,
+            reportWithResultsZipFilePath,
+            path.join(workingDirectoryFullPath, reportWithResultsZip)
+        );
+    } else {
+        isExecutionSuccessfull = await tb2robotLib.startTb2robotRead(
+            context,
+            workingDirectoryFullPath,
+            robotResultXMLFile,
+            reportWithResultsZipFilePath,
+            path.join(workingDirectoryFullPath, reportWithResultsZip),
+            tb2robotConfigFilePath
+        );
+    }
+
+    if (!await handleExecutionError(workingDirectoryFullPath, isExecutionSuccessfull, reportWithResultsZipFilePath)) {
+        // Remove the downloaded report zip file after usage
+        return;
+    }
+    await removeReportZipFile(reportWithResultsZipFilePath);
+    console.log(`tb2robot read executed.`);
+    vscode.window.showInformationMessage(`Test results read and report created.`);
+}
+
+/**
  * Entry point for the robotframework test generation process from the TestBench JSON report.
  * @param treeItem The selected tree item
  * @param baseKey The base key of the extension
  * @param workingDirectory The path to save the downloaded report
  * @returns Promise<void>
  */
-export async function startTestGenerationProcess(
+export async function startTestGenerationProcessForCycle(
     context: vscode.ExtensionContext,
     treeItem: ProjectManagementTreeItem,
     baseKey: string,
@@ -968,59 +1160,18 @@ export async function executeTb2RobotReadCommand(
  */
 export async function generateTestsExecuteTestsReadResults(
     terminalCodeExecutionPath: string,
-    reportWithoutResultsZipFilePath: string,
-    outputDirOfRobotframeworkResults: string,
-    pathOfRobotFrameworkTests: string,
-    robotResultXMLFile: string,
-    reportWithResultsZipFilePath: string,
-    progress: vscode.Progress<{ message?: string; increment?: number }> | undefined
+    outputDirOfRobotframeworkResults: string = "output",
+    pathOfRobotFrameworkTests: string = "Generated"
 ): Promise<void> {
     return new Promise(async (resolve, reject) => {
         const terminal = getOrCreateTerminal("generate-tests");
         terminal.sendText(`cd ${terminalCodeExecutionPath}`); // Execute terminal commands inside this directory
 
         try {
-            // Step 1: Execute 'tb2robot write cycle.zip'
-            await executeTb2RobotWriteCommand(
-                terminal,
-                reportWithoutResultsZipFilePath,
-                getConfigurationFilePath(terminalCodeExecutionPath)
-            );
-            console.log(
-                `Successfully executed: tb2robot write -c ${getConfigurationFilePath(
-                    terminalCodeExecutionPath
-                )} ${reportWithoutResultsZipFilePath}`
-            );
-
-            if (progress) {
-                progress.report({
-                    increment: 10,
-                    message: `Running tests...`,
-                });
-            }
-
             // Step 2: Execute 'robot -d output --dryrun Generated'
             await executeRobotDryRunCommand(terminal, outputDirOfRobotframeworkResults, pathOfRobotFrameworkTests);
             console.log(
                 `Successfully executed: robot -d ${outputDirOfRobotframeworkResults} --dryrun ${pathOfRobotFrameworkTests}`
-            );
-
-            if (progress) {
-                progress.report({
-                    increment: 10,
-                    message: `Reading test resuls...`,
-                });
-            }
-
-            // Step 3: Execute 'tb2robot read -o output/output.xml -r ReportWithResults.zip cycle.zip'
-            await executeTb2RobotReadCommand(
-                terminal,
-                robotResultXMLFile,
-                reportWithResultsZipFilePath,
-                reportWithoutResultsZipFilePath
-            );
-            console.log(
-                `Successfully executed: tb2robot read -o ${robotResultXMLFile} -r ${reportWithResultsZipFilePath} ${reportWithoutResultsZipFilePath}`
             );
         } catch (error) {
             console.error(`Error executing commands in sequence: ${error}`);

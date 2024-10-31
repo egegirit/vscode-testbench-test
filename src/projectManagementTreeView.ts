@@ -220,8 +220,8 @@ export function findProjectKeyOfCycleElement(element: ProjectManagementTreeItem)
 }
 
 // Function to find the serial key of the project of a cycle element in the tree hierarchy
-export function findCycleKeyOfTestThemeElement(element: ProjectManagementTreeItem): string | undefined {
-    if (element.contextValue !== "TestThemeNode") {
+export function findCycleKeyOfTreeElement(element: ProjectManagementTreeItem): string | undefined {
+    if ((element.contextValue !== "TestThemeNode") && (element.contextValue !== "TestCaseSetNode")) {
         console.error("Element is not a test theme.");
         return undefined;
     }

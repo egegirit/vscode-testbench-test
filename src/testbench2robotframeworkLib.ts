@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { exec } from "child_process";
 import { buildTb2RobotCommand, buildRobotCommand } from "./pyCommandBuilder";
+import { config } from "process";
 
 /**
  * Generates Robot Framework Testsuites.
@@ -50,14 +51,23 @@ export function tb2robotRead(
     workingDirectory: string,
     outputXmlPath: string,
     reportWithoutResultsPath: string,
-    resultPath?: string
+    resultPath?: string,
+    configJSONPath?: string
 ): Promise<void> {
     return new Promise(async (resolve, reject) => {
         const commandBase = await buildTb2RobotCommand(extensionContext);
 
+        // OVerwrite the results in the reportPath if no resultPath is provided.
         let command = `${commandBase} read -o ${outputXmlPath} -r ${reportWithoutResultsPath}`;
+
+        // Write the results to the resultPath if provided.
         if (resultPath) {
             command = `${commandBase} read -o ${outputXmlPath} -r ${resultPath} ${reportWithoutResultsPath}`;
+        }
+
+        // Use the provided config file if provided.
+        if (configJSONPath) {
+            command = `${commandBase} read -c ${configJSONPath} -o ${outputXmlPath} -r ${resultPath} ${reportWithoutResultsPath}`;
         }
 
         console.log(`Executing command: ${command}`);
@@ -146,11 +156,12 @@ export async function startTb2robotRead(
     workingDirectory: string,
     outputXmlPath: string,
     reportPath: string,
-    resultPath?: string
+    resultPath?: string,
+    configJSONPath?: string
 ): Promise<boolean> {
     let res = true;
 
-    await tb2robotRead(extensionContext, workingDirectory, outputXmlPath, reportPath, resultPath)
+    await tb2robotRead(extensionContext, workingDirectory, outputXmlPath, reportPath, resultPath, configJSONPath)
         .then(() => {
             let providedPath = "none";
             if (resultPath) {

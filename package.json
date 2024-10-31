@@ -274,6 +274,22 @@
                 }
             },
             {
+                "command": "testbenchExtension.readRFTestResultsAndCreateReportWithResults",
+                "title": "TestBench: Read Test Results & Create Report With Results",
+                "icon": {
+                    "light": "resources/icons/read.svg",
+                    "dark": "resources/icons/read.svg"
+                }
+            },
+            {
+                "command": "testbenchExtension.executeRobotFrameworkTests",
+                "title": "TestBench: Execute Tests",
+                "icon": {
+                    "light": "resources/icons/run.svg",
+                    "dark": "resources/icons/run.svg"
+                }
+            },
+            {
                 "command": "testbenchExtension.refreshProjectTreeView",
                 "title": "TestBench: Refresh Project Tree View",
                 "when": "view == projectManagementTree",
@@ -360,28 +376,23 @@
                     "when": "view == projectManagementTree || view == testThemeTree"
                 },
                 {
-                    "command": "testbenchExtension.uploadTestResultsToTestbench",
+                    "command": "testbenchExtension.executeRobotFrameworkTests",
                     "group": "navigation@4",
                     "when": "view == projectManagementTree || view == testThemeTree"
                 },
                 {
-                    "command": "testbenchExtension.displayCommands",
+                    "command": "testbenchExtension.readRFTestResultsAndCreateReportWithResults",
                     "group": "navigation@5",
                     "when": "view == projectManagementTree || view == testThemeTree"
                 },
                 {
-                    "command": "testbenchExtension.refreshProjectTreeView",
+                    "command": "testbenchExtension.uploadTestResultsToTestbench",
                     "group": "navigation@6",
-                    "when": "view == projectManagementTree"
-                },
-                {
-                    "command": "testbenchExtension.refreshTestTreeView",
-                    "group": "navigation@7",
-                    "when": "view == testThemeTree"
+                    "when": "view == projectManagementTree || view == testThemeTree"
                 },
                 {
                     "command": "testbenchExtension.showExtensionSettings",
-                    "group": "navigation@8",
+                    "group": "navigation@7",
                     "when": "view == projectManagementTree || view == testThemeTree"
                 }
             ],
@@ -393,7 +404,7 @@
                 },
                 {
                     "command": "testbenchExtension.generateTestCasesForTestTheme",
-                    "when": "view == testThemeTree && viewItem == TestThemeNode",
+                    "when": "view == testThemeTree && (viewItem == TestThemeNode || viewItem == TestCaseSetNode)",
                     "group": "inline"
                 },
                 {

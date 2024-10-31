@@ -2,9 +2,13 @@ import * as vscode from "vscode";
 import * as jsonReportHandler from "./reportHandler";
 import * as testbenchConnection from "./testBenchConnection";
 import * as projectManagementTreeView from "./projectManagementTreeView";
+import path from "path";
 
 // TODO: WebViev UI for login?
 // TODO: Create extension documentation in Readme.md
+// TODO: To be able to select the report.zip in .testbench automatically, or fetch it from server automatically, store the UID of the fetched report and project key.
+// TODO: The working directory will be populated with a lot of files. Be able to clean it up.
+// TODO: Add a timestamp or UID to ReportWithResults.zip
 
 // Prefix of the commands in package.json
 export const baseKey = "testbenchExtension";
@@ -16,6 +20,19 @@ export let connection: testbenchConnection.PlayServerConnection | null = null; /
 export function setConnection(newConnection: testbenchConnection.PlayServerConnection) {
     connection = newConnection;
 }
+
+interface LastGeneratedReportParams {
+    executionBased: boolean | undefined;
+    projectKey: string | undefined;
+    cycleKey: string | undefined;
+    UID: string | undefined;
+}
+export let lastGeneratedReportParams: LastGeneratedReportParams = {
+    executionBased: undefined,
+    projectKey: undefined,
+    cycleKey: undefined,
+    UID: undefined,
+};
 
 export function activate(context: vscode.ExtensionContext) {
     // Store extension commands with their titles to be able to display them together in a quickpick
@@ -44,6 +61,10 @@ export function activate(context: vscode.ExtensionContext) {
             command: `${baseKey}.generateTestCasesForTestTheme`,
             title: "Generate Tests",
         },
+        readRFTestResultsAndCreateReportWithResults: {
+            command: `${baseKey}.readRFTestResultsAndCreateReportWithResults`,
+            title: "Read Test Results & Create Report With Results",
+        },
         makeRoot: {
             command: `${baseKey}.makeRoot`,
             title: "Make Root Item",
@@ -67,6 +88,10 @@ export function activate(context: vscode.ExtensionContext) {
         uploadTestResultsToTestbench: {
             command: `${baseKey}.uploadTestResultsToTestbench`,
             title: "Upload Test Results To Testbench",
+        },
+        executeRobotFrameworkTests: {
+            command: `${baseKey}.executeRobotFrameworkTests`,
+            title: "Execute Tests",
         },
         refreshProjectTreeView: {
             command: `${baseKey}.refreshProjectTreeView`,
@@ -171,6 +196,7 @@ export function activate(context: vscode.ExtensionContext) {
                     commands.changeConnection.title,
                     commands.showExtensionSettings.title,
                     commands.selectAndLoadProject.title,
+                    commands.readRFTestResultsAndCreateReportWithResults.title,
                     commands.uploadTestResultsToTestbench.title,
                     "Cancel",
                 ];
@@ -194,6 +220,9 @@ export function activate(context: vscode.ExtensionContext) {
                     break;
                 case commands.selectAndLoadProject.title:
                     vscode.commands.executeCommand(commands.selectAndLoadProject.command);
+                    break;
+                case commands.readRFTestResultsAndCreateReportWithResults.title:
+                    vscode.commands.executeCommand(commands.readRFTestResultsAndCreateReportWithResults.command);
                     break;
                 case commands.uploadTestResultsToTestbench.title:
                     vscode.commands.executeCommand(commands.uploadTestResultsToTestbench.command);
@@ -268,7 +297,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // Download the zip inside a folder and not directly into the workspace folder, and keep working in one folder.
-    const folderNameToDownloadReport = "Report";
+    const folderNameOfTestbenchWorkingDirectory = ".testbench";
     // Register the "Generate Tests" command, which is activated for a cycle element
     context.subscriptions.push(
         vscode.commands.registerCommand(
@@ -287,11 +316,11 @@ export function activate(context: vscode.ExtensionContext) {
                     }
 
                     if (projectManagementTreeDataProvider) {
-                        await jsonReportHandler.startTestGenerationProcess(
+                        await jsonReportHandler.startTestGenerationProcessForCycle(
                             context,
                             item,
                             baseKey,
-                            folderNameToDownloadReport,
+                            folderNameOfTestbenchWorkingDirectory,
                             projectManagementTreeDataProvider
                         );
                     } else {
@@ -314,12 +343,12 @@ export function activate(context: vscode.ExtensionContext) {
                 if (connection) {
                     console.log("Generating tests for test theme:", treeItem);
 
-                    let testThemeTreeUniqueID = treeItem.item?.base?.uniqueID;
-                    let cycleKey = projectManagementTreeView.findCycleKeyOfTestThemeElement(treeItem);
+                    let treeElementUniqueID = treeItem.item?.base?.uniqueID;
+                    let cycleKey = projectManagementTreeView.findCycleKeyOfTreeElement(treeItem);
                     let projectKey = projectManagementTreeView.findProjectKeyOfCycleElement(treeItem.parent!);
 
                     // TODO: remove projectManagementTreeDataProvider when we replace local search with server project tree fetching and then searching
-                    if (!projectKey || !cycleKey || !testThemeTreeUniqueID || !projectManagementTreeDataProvider) {
+                    if (!projectKey || !cycleKey || !treeElementUniqueID || !projectManagementTreeDataProvider) {
                         console.error(
                             "Error when finding project key, cycle key, test theme unique ID or projectManagementTreeDataProvider."
                         );
@@ -333,15 +362,39 @@ export function activate(context: vscode.ExtensionContext) {
                         baseKey,
                         projectKey,
                         cycleKey,
-                        folderNameToDownloadReport,
+                        folderNameOfTestbenchWorkingDirectory,
                         projectManagementTreeDataProvider, // TODO
-                        testThemeTreeUniqueID
+                        treeElementUniqueID
                     );
                 } else {
                     vscode.window.showErrorMessage("No connection available. Please log in first.");
                 }
             }
         )
+    );
+
+    // Register the "Execute Tests" command
+    context.subscriptions.push(
+        vscode.commands.registerCommand(commands.executeRobotFrameworkTests.command, async () => {    
+            const config = vscode.workspace.getConfiguration(baseKey);
+            jsonReportHandler.generateTestsExecuteTestsReadResults(                
+                path.join(config.get<string>("workspaceLocation")!, folderNameOfTestbenchWorkingDirectory)
+            );
+        })
+    );
+
+    // Register the "Read Test Results" command, which is activated for a test theme or test case set element
+    context.subscriptions.push(
+        vscode.commands.registerCommand(commands.readRFTestResultsAndCreateReportWithResults.command, async () => {
+            if (connection) {
+                jsonReportHandler.readTestResultsAndCreateReportWithResults(
+                    context,
+                    folderNameOfTestbenchWorkingDirectory
+                );
+            } else {
+                vscode.window.showErrorMessage("No connection available. Please log in first.");
+            }
+        })
     );
 
     // Register the "Make Root" command

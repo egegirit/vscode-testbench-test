@@ -562,6 +562,7 @@ export async function performLogin(
         if (newConnection) {
             console.log("Login successful.");
             vscode.window.showInformationMessage("Login successful.");
+
             vscode.commands.executeCommand("setContext", "testbenchExtension.connectionActive", true);
             setConnection(newConnection);
             return newConnection;
