@@ -617,7 +617,11 @@ export async function generateTestsWithTestBenchToRobotFramework(
                 }
 
                 if (
-                    !await handleExecutionError(workingDirectoryFullPath, isExecutionSuccessfull, downloadedReportZipFilePath)
+                    !(await handleExecutionError(
+                        workingDirectoryFullPath,
+                        isExecutionSuccessfull,
+                        downloadedReportZipFilePath
+                    ))
                 ) {
                     return;
                 }
@@ -632,8 +636,10 @@ export async function generateTestsWithTestBenchToRobotFramework(
                 // Delete created json config file after usage
                 await deleteConfigurationFile(getConfigurationFilePath(workingDirectoryFullPath));
 
-                // Remove the downloaded report zip file after usage
-                await removeReportZipFile(downloadedReportZipFilePath);
+                if (config.get<boolean>("clearReportAfterProcessing")) {
+                    // Remove the downloaded report zip file after usage
+                    await removeReportZipFile(downloadedReportZipFilePath);
+                }
 
                 vscode.window.showInformationMessage(`Test generation done.`);
             } catch (error: any) {
@@ -683,10 +689,10 @@ export async function findOutputXml(): Promise<string | undefined> {
 }
 
 /**
- * Removes the zip file.
+ * Removes the given zip file.
  * @param downloadedReportZipFilePath The path of the report zip file.
  */
-async function removeReportZipFile(downloadedReportZipFilePath: string): Promise<void> {
+export async function removeReportZipFile(downloadedReportZipFilePath: string): Promise<void> {
     try {
         // Check if the file exists
         if (!fs.existsSync(downloadedReportZipFilePath)) {
@@ -697,11 +703,14 @@ async function removeReportZipFile(downloadedReportZipFilePath: string): Promise
         const fileName = path.basename(downloadedReportZipFilePath);
         const fileExtension = path.extname(downloadedReportZipFilePath);
 
-        // Check if the file name starts with "cycle-"
-        if (!fileName.startsWith("cycle-")) {
-            throw new Error("File name does not start with the required prefix 'cycle-'.");
-        }
-
+        /*
+        if (filePrefix)
+            if (!fileName.startsWith(filePrefix)) {
+                // Check if the file name starts with the prefix
+                throw new Error("File name does not start with the required prefix.");
+            }
+        */
+        
         // Check if the file is a zip file
         if (fileExtension !== ".zip") {
             throw new Error("File is not a zip file.");
@@ -858,11 +867,14 @@ export async function readTestResultsAndCreateReportWithResults(
         );
     }
 
-    if (!await handleExecutionError(workingDirectoryFullPath, isExecutionSuccessfull, reportWithResultsZipFilePath)) {
-        // Remove the downloaded report zip file after usage
+    if (!(await handleExecutionError(workingDirectoryFullPath, isExecutionSuccessfull, reportWithResultsZipFilePath))) {
         return;
     }
-    await removeReportZipFile(reportWithResultsZipFilePath);
+
+    if (config.get<boolean>("clearReportAfterProcessing")) {
+        await removeReportZipFile(reportWithResultsZipFilePath);
+    }
+
     console.log(`tb2robot read executed.`);
     vscode.window.showInformationMessage(`Test results read and report created.`);
 }

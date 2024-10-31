@@ -43,8 +43,7 @@
                 "testbenchExtension.workspaceLocation": {
                     "type": "string",
                     "description": "The path to the workspace or project directory on the local machine for storing local files.",
-                    "order": 5,
-                    "scope": "Other Settings"
+                    "order": 5
                 },
                 "testbenchExtension.testbench2robotframeworkConfig": {
                     "type": "object",
@@ -225,6 +224,12 @@
                         }
                     },
                     "scope": "Other Settings"
+                },
+                "testbenchExtension.clearReportAfterProcessing": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Remove report file after processing.",
+                    "order": 6
                 }
             }
         },

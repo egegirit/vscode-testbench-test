@@ -7,7 +7,8 @@ import JSZip from "jszip";
 import axios, { AxiosInstance, AxiosResponse } from "axios";
 import { ProjectManagementTreeDataProvider, initializeTreeView } from "./projectManagementTreeView";
 import path from "path";
-import { connection, setConnection } from "./extension";
+import { connection, setConnection, baseKey, folderNameOfTestbenchWorkingDirectory } from "./extension";
+
 
 // Ignore SSL certificate validation in node requests
 // TODO: Remove this in production, and use a valid certificate
@@ -796,9 +797,14 @@ async function fetchServerVersions(
 
 async function promptForReportZipFileWithResults(): Promise<string | undefined> {
     try {
+        const config = vscode.workspace.getConfiguration(baseKey);
+        const workspacePath = config.get<string>("workspaceLocation");
+        const workingDirectoryFullPath = path.join(workspacePath!, folderNameOfTestbenchWorkingDirectory);
+
         const options: vscode.OpenDialogOptions = {
-            canSelectMany: false,
+            defaultUri: vscode.Uri.file(workingDirectoryFullPath),
             openLabel: "Select Zip File with Test Results",
+            canSelectMany: false,
             canSelectFiles: true,
             canSelectFolders: false,
             filters: {
@@ -957,6 +963,12 @@ export async function selectReportWithResultsAndImportToTestbench(
     }
 
     await importReportWithResultsToTestbench(connection, projectManagementTreeDataProvider, resultZipFilePath);
+    
+    const config = vscode.workspace.getConfiguration(baseKey);
+    if (config.get<boolean>("clearReportAfterProcessing")) {
+        // Remove the report zip file after usage
+        await jsonReportHandler.removeReportZipFile(resultZipFilePath);
+    }    
 }
 
 interface ExtractedData {

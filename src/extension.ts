@@ -7,8 +7,6 @@ import path from "path";
 // TODO: WebViev UI for login?
 // TODO: Create extension documentation in Readme.md
 // TODO: To be able to select the report.zip in .testbench automatically, or fetch it from server automatically, store the UID of the fetched report and project key.
-// TODO: The working directory will be populated with a lot of files. Be able to clean it up.
-// TODO: Add a timestamp or UID to ReportWithResults.zip
 
 // Prefix of the commands in package.json
 export const baseKey = "testbenchExtension";
@@ -17,9 +15,13 @@ export const baseKey = "testbenchExtension";
 export let projectManagementTreeDataProvider: projectManagementTreeView.ProjectManagementTreeDataProvider | null = null; // Store the tree data provider
 export let connection: testbenchConnection.PlayServerConnection | null = null; // Store the connection to server
 
+
 export function setConnection(newConnection: testbenchConnection.PlayServerConnection) {
     connection = newConnection;
 }
+
+// Folder to create under the working directory to download / process files
+export const folderNameOfTestbenchWorkingDirectory = ".testbench";
 
 interface LastGeneratedReportParams {
     executionBased: boolean | undefined;
@@ -125,7 +127,7 @@ export function activate(context: vscode.ExtensionContext) {
         // If the user wont specify a workspace location, use the workspace location of VS Code
         if (!config.get<string>("workspaceLocation")) {
             await config.update("workspaceLocation", vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
-        }
+        }        
     }
 
     // Load initial configuration
@@ -295,9 +297,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
         })
     );
-
-    // Download the zip inside a folder and not directly into the workspace folder, and keep working in one folder.
-    const folderNameOfTestbenchWorkingDirectory = ".testbench";
+    
     // Register the "Generate Tests" command, which is activated for a cycle element
     context.subscriptions.push(
         vscode.commands.registerCommand(
