@@ -9,7 +9,6 @@ import { ProjectManagementTreeDataProvider, initializeTreeView } from "./project
 import path from "path";
 import { connection, setConnection, baseKey, folderNameOfTestbenchWorkingDirectory } from "./extension";
 
-
 // Ignore SSL certificate validation in node requests
 // TODO: Remove this in production, and use a valid certificate
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -955,20 +954,51 @@ export async function selectReportWithResultsAndImportToTestbench(
     connection: PlayServerConnection,
     projectManagementTreeDataProvider: ProjectManagementTreeDataProvider
 ) {
-    // const resultZipFileName = "ReportWithoutResultsForTb2robot.zip"; //"ReportWithResults.zip";
-    const resultZipFilePath = await promptForReportZipFileWithResults();
-    if (!resultZipFilePath) {
-        // vscode.window.showErrorMessage("No location selected for the ReportWithResults.zip file.");
-        return;
-    }
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: `Importing results to TestBench server`,
+            cancellable: true,
+        },
+        async (progress, cancellationToken) => {
 
-    await importReportWithResultsToTestbench(connection, projectManagementTreeDataProvider, resultZipFilePath);
-    
-    const config = vscode.workspace.getConfiguration(baseKey);
-    if (config.get<boolean>("clearReportAfterProcessing")) {
-        // Remove the report zip file after usage
-        await jsonReportHandler.removeReportZipFile(resultZipFilePath);
-    }    
+            if (progress) {
+                progress.report({
+                    message: `Selecting report file with results.`,
+                    increment: 30,
+                });
+            }
+
+            // const resultZipFileName = "ReportWithoutResultsForTb2robot.zip"; //"ReportWithResults.zip";
+            const resultZipFilePath = await promptForReportZipFileWithResults();
+            if (!resultZipFilePath) {
+                // vscode.window.showErrorMessage("No location selected for the ReportWithResults.zip file.");
+                return;
+            }
+
+            if (progress) {
+                progress.report({
+                    message: `Selecting report file with results.`,
+                    increment: 30,
+                });
+            }
+
+
+            await importReportWithResultsToTestbench(connection, projectManagementTreeDataProvider, resultZipFilePath);
+
+            if (progress) {
+                progress.report({
+                    message: `Cleaning up.`,
+                    increment: 30,
+                });
+            }
+            const config = vscode.workspace.getConfiguration(baseKey);
+            if (config.get<boolean>("clearReportAfterProcessing")) {                
+                // Remove the report zip file after usage
+                await jsonReportHandler.removeReportZipFile(resultZipFilePath);
+            }
+        }
+    );
 }
 
 interface ExtractedData {

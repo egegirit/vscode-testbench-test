@@ -3,11 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as types from "./types";
 import axios, { AxiosResponse } from "axios";
-import {
-    ProjectManagementTreeItem,
-    findProjectKeyOfCycleElement,
-    ProjectManagementTreeDataProvider,
-} from "./projectManagementTreeView";
+import * as projectManagementTreeView from "./projectManagementTreeView";
 import * as tb2robotLib from "./testbench2robotframeworkLib";
 import { connection, baseKey, lastGeneratedReportParams } from "./extension";
 
@@ -412,6 +408,87 @@ export function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export async function callFetchReportForTreeElement(
+    treeItem: projectManagementTreeView.ProjectManagementTreeItem,
+    projectManagementTreeViewOfExtension: projectManagementTreeView.ProjectManagementTreeDataProvider | null,
+    workingDirectory: string
+) {
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: `Fetching Report for ${treeItem.label}`,
+            cancellable: true,
+        },
+        async (progress, cancellationToken) => {
+
+            if (progress) {
+                progress.report({
+                    increment: 35,
+                    message: `Selecting report parameters.`,
+                });
+            }
+
+            console.log("Fetching report for the selected tree item:", treeItem);
+
+            if (!connection) {
+                vscode.window.showErrorMessage("No connection available. Please log in first.");
+                return;
+            }
+
+            if (!projectManagementTreeViewOfExtension) {
+                vscode.window.showErrorMessage(
+                    "Project management tree is not initialized. Please select a project first."
+                );
+                return;
+            }
+            let projectKey = projectManagementTreeViewOfExtension.currentProjectKeyInView;
+            if (!projectKey) {
+                console.log("No project selected. Please select a project first.");
+                return;
+            }
+            let cycleKey = projectManagementTreeView.findCycleKeyOfTreeElement(treeItem);
+            if (!cycleKey) {
+                console.log("No cycle selected. Please select a cycle first.");
+                return;
+            }
+
+            let treeElementUniqueID = treeItem.item?.base?.uniqueID;
+
+            const executionBased = await isExecutionBasedReportSelected();
+            if (executionBased === null) {
+                console.log("Export method is not selected. Fetching report for the selected tree item.");
+                return;
+            }
+            const cycleStructureOptionsRequestParameter: types.OptionalJobIDRequestParameter = {
+                basedOnExecution: executionBased,
+                treeRootUID: treeElementUniqueID,
+            };
+
+            console.log(
+                `Started fetching report for the selected tree item, projectKey: ${projectKey}, cycleKey: ${cycleKey}, treeElementUniqueID: ${treeElementUniqueID}.`
+            );
+
+            if (progress) {
+                progress.report({
+                    increment: 30,
+                    message: `Fetching report.`,
+                });
+            }
+
+            // Fetch the ZIP file from the server, passing the cancellationToken
+            const downloadedReportZipFilePath = await fetchZipFile(
+                baseKey,
+                projectKey,
+                cycleKey,
+                workingDirectory,
+                cycleStructureOptionsRequestParameter
+            );
+
+            console.log(`Report downloaded to: ${downloadedReportZipFilePath}.`);
+        }
+    );
+}
+
 async function handleExecutionError(
     workingDirectoryFullPath: string,
     isExecutionSuccessfull: boolean,
@@ -439,13 +516,12 @@ async function handleExecutionError(
  */
 export async function generateTestsWithTestBenchToRobotFramework(
     context: vscode.ExtensionContext,
-    treeItem: ProjectManagementTreeItem,
+    treeItem: projectManagementTreeView.ProjectManagementTreeItem,
     itemLabel: string,
     baseKey: string,
     projectKey: string,
     cycleKey: string,
     workingDirectory: string,
-    projectManagementTreeDataProvider: ProjectManagementTreeDataProvider, // TODO
     UIDofTestThemeElementToGenerateTestsFor?: string
 ): Promise<void> {
     // Execution based or specification based request parameter
@@ -710,7 +786,7 @@ export async function removeReportZipFile(downloadedReportZipFilePath: string): 
                 throw new Error("File name does not start with the required prefix.");
             }
         */
-        
+
         // Check if the file is a zip file
         if (fileExtension !== ".zip") {
             throw new Error("File is not a zip file.");
@@ -792,91 +868,144 @@ export async function readTestResultsAndCreateReportWithResults(
     workingDirectory: string,
     reportWithResultsZip: string = `ReportWithResults_${new Date().getTime()}.zip` // Add a timestamp to the result file
 ) {
-    const config = vscode.workspace.getConfiguration(baseKey);
-    const workspacePath = config.get<string>("workspaceLocation");
-    const workingDirectoryFullPath = path.join(workspacePath!, workingDirectory);
+    await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: `Reading Test Results and Creating Report`,
+            cancellable: true,
+        },
+        async (progress, cancellationToken) => {
+            if (progress) {
+                progress.report({
+                    message: `Choosing result XML file.`,
+                    increment: 20,
+                });
+            }
 
-    // Select output XML file
-    /*
-    Use this code if you want to automate finding the output.xml
-    let outputXMLPath = await findOutputXml();
-    let robotResultXMLFile = outputXMLPath ? outputXMLPath : await chooseRobotXMLFile();
-    */
-    let robotResultXMLFile = await chooseRobotXMLFile(workingDirectoryFullPath);
-    if (!robotResultXMLFile) {
-        console.error(`No XML file selected.`);
-        vscode.window.showErrorMessage(`No XML file selected.`);
-        return;
-    }
+            const config = vscode.workspace.getConfiguration(baseKey);
+            const workspacePath = config.get<string>("workspaceLocation");
+            const workingDirectoryFullPath = path.join(workspacePath!, workingDirectory);
 
-    const cycleStructureOptionsRequestParameter: types.OptionalJobIDRequestParameter = {
-        basedOnExecution: lastGeneratedReportParams.executionBased,
-        treeRootUID: lastGeneratedReportParams.UID,
-    };
+            // Select output XML file
+            /*
+            Use this code if you want to automate finding the output.xml
+            let outputXMLPath = await findOutputXml();
+            let robotResultXMLFile = outputXMLPath ? outputXMLPath : await chooseRobotXMLFile();
+            */
+            let robotResultXMLFile = await chooseRobotXMLFile(workingDirectoryFullPath);
+            if (!robotResultXMLFile) {
+                console.error(`No XML file selected.`);
+                vscode.window.showErrorMessage(`No XML file selected.`);
+                return;
+            }
 
-    if (
-        !(
-            lastGeneratedReportParams.executionBased !== undefined &&
-            lastGeneratedReportParams.projectKey !== undefined &&
-            lastGeneratedReportParams.cycleKey !== undefined &&
-            lastGeneratedReportParams.UID !== undefined
-        )
-    ) {
-        console.log(`Last generated report parameters are missing.`);
-        return;
-    }
+            if (progress) {
+                progress.report({
+                    message: `Fetching report.`,
+                    increment: 20,
+                });
+            }
 
-    // Fetch the ZIP file from the server
-    let downloadedReportZipFilePath = await fetchZipFile(
-        baseKey,
-        lastGeneratedReportParams.projectKey,
-        lastGeneratedReportParams.cycleKey,
-        workingDirectory,
-        cycleStructureOptionsRequestParameter
+            const cycleStructureOptionsRequestParameter: types.OptionalJobIDRequestParameter = {
+                basedOnExecution: lastGeneratedReportParams.executionBased,
+                treeRootUID: lastGeneratedReportParams.UID,
+            };
+
+            if (
+                !(
+                    lastGeneratedReportParams.executionBased !== undefined &&
+                    lastGeneratedReportParams.projectKey !== undefined &&
+                    lastGeneratedReportParams.cycleKey !== undefined &&
+                    lastGeneratedReportParams.UID !== undefined
+                )
+            ) {
+                console.log(`Last generated report parameters are missing.`);
+                return;
+            }
+
+            // Fetch the ZIP file from the server
+            let downloadedReportZipFilePath = await fetchZipFile(
+                baseKey,
+                lastGeneratedReportParams.projectKey,
+                lastGeneratedReportParams.cycleKey,
+                workingDirectory,
+                cycleStructureOptionsRequestParameter
+            );
+
+            if (progress) {
+                progress.report({
+                    message: `Working on report.`,
+                    increment: 20,
+                });
+            }
+
+            let reportWithResultsZipFilePath =
+                downloadedReportZipFilePath !== null
+                    ? downloadedReportZipFilePath
+                    : await chooseReportWithouResultsZipFile(workingDirectoryFullPath);
+            if (!reportWithResultsZipFilePath) {
+                console.error(`No report file selected.`);
+                vscode.window.showErrorMessage(`No report file selected.`);
+                return;
+            }
+
+            if (progress) {
+                progress.report({
+                    message: `Preparing configuration for testbench2robotframework.`,
+                    increment: 10,
+                });
+            }
+
+            // Create configuration json object called testbench2robotframeworkConfig.json
+            let isExecutionSuccessfull;
+            const tb2robotConfigFilePath = await saveTestbench2RobotConfigurationAsJson(
+                baseKey,
+                workingDirectoryFullPath
+            );
+
+            if (progress) {
+                progress.report({
+                    message: `Reading test results and creating report.`,
+                    increment: 10,
+                });
+            }
+            if (!tb2robotConfigFilePath) {
+                isExecutionSuccessfull = await tb2robotLib.startTb2robotRead(
+                    context,
+                    workingDirectoryFullPath,
+                    robotResultXMLFile,
+                    reportWithResultsZipFilePath,
+                    path.join(workingDirectoryFullPath, reportWithResultsZip)
+                );
+            } else {
+                isExecutionSuccessfull = await tb2robotLib.startTb2robotRead(
+                    context,
+                    workingDirectoryFullPath,
+                    robotResultXMLFile,
+                    reportWithResultsZipFilePath,
+                    path.join(workingDirectoryFullPath, reportWithResultsZip),
+                    tb2robotConfigFilePath
+                );
+            }
+
+            if (
+                !(await handleExecutionError(
+                    workingDirectoryFullPath,
+                    isExecutionSuccessfull,
+                    reportWithResultsZipFilePath
+                ))
+            ) {
+                return;
+            }
+
+            if (config.get<boolean>("clearReportAfterProcessing")) {
+                await removeReportZipFile(reportWithResultsZipFilePath);
+            }
+
+            console.log(`tb2robot read executed.`);
+            vscode.window.showInformationMessage(`Test results read and report created.`);
+        }
     );
-
-    let reportWithResultsZipFilePath =
-        downloadedReportZipFilePath !== null
-            ? downloadedReportZipFilePath
-            : await chooseReportWithouResultsZipFile(workingDirectoryFullPath);
-    if (!reportWithResultsZipFilePath) {
-        console.error(`No report file selected.`);
-        vscode.window.showErrorMessage(`No report file selected.`);
-        return;
-    }
-
-    // Create configuration json object called testbench2robotframeworkConfig.json
-    let isExecutionSuccessfull;
-    const tb2robotConfigFilePath = await saveTestbench2RobotConfigurationAsJson(baseKey, workingDirectoryFullPath);
-    if (!tb2robotConfigFilePath) {
-        isExecutionSuccessfull = await tb2robotLib.startTb2robotRead(
-            context,
-            workingDirectoryFullPath,
-            robotResultXMLFile,
-            reportWithResultsZipFilePath,
-            path.join(workingDirectoryFullPath, reportWithResultsZip)
-        );
-    } else {
-        isExecutionSuccessfull = await tb2robotLib.startTb2robotRead(
-            context,
-            workingDirectoryFullPath,
-            robotResultXMLFile,
-            reportWithResultsZipFilePath,
-            path.join(workingDirectoryFullPath, reportWithResultsZip),
-            tb2robotConfigFilePath
-        );
-    }
-
-    if (!(await handleExecutionError(workingDirectoryFullPath, isExecutionSuccessfull, reportWithResultsZipFilePath))) {
-        return;
-    }
-
-    if (config.get<boolean>("clearReportAfterProcessing")) {
-        await removeReportZipFile(reportWithResultsZipFilePath);
-    }
-
-    console.log(`tb2robot read executed.`);
-    vscode.window.showInformationMessage(`Test results read and report created.`);
 }
 
 /**
@@ -888,15 +1017,14 @@ export async function readTestResultsAndCreateReportWithResults(
  */
 export async function startTestGenerationProcessForCycle(
     context: vscode.ExtensionContext,
-    treeItem: ProjectManagementTreeItem,
+    treeItem: projectManagementTreeView.ProjectManagementTreeItem,
     baseKey: string,
-    workingDirectory: string,
-    projectManagementTreeDataProvider: ProjectManagementTreeDataProvider
+    workingDirectory: string
 ) {
     // Check if the cycle key is available
     const cycleKey = treeItem.item.key;
     if (cycleKey) {
-        const projectKeyOfCycle = findProjectKeyOfCycleElement(treeItem);
+        const projectKeyOfCycle = projectManagementTreeView.findProjectKeyOfCycleElement(treeItem);
         if (!projectKeyOfCycle) {
             return Promise.resolve([]);
         }
@@ -914,7 +1042,6 @@ export async function startTestGenerationProcessForCycle(
                         projectKeyOfCycle,
                         cycleKey,
                         workingDirectory,
-                        projectManagementTreeDataProvider,
                         undefined // UIDofTestThemeElementToGenerateTestsFor is undefined for a test cycle
                     );
                 } else {

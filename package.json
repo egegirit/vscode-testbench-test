@@ -6,7 +6,7 @@
     "icon": "resources/icons/iTB-EE-Logo-256x256.png",
     "version": "0.0.1",
     "engines": {
-        "vscode": "^1.94.0"
+        "vscode": "^1.95.0"
     },
     "categories": [
         "Other"
@@ -259,12 +259,28 @@
                 "title": "TestBench: Set Workspace Location"
             },
             {
-                "command": "testbenchExtension.generateTestCases",
-                "title": "Generate Tests"
+                "command": "testbenchExtension.generateTestCasesForCycle",
+                "title": "Generate Tests",
+                "icon": {
+                    "light": "resources/icons/add.svg",
+                    "dark": "resources/icons/add.svg"
+                }
             },
             {
-                "command": "testbenchExtension.generateTestCasesForTestTheme",
-                "title": "Generate Tests"
+                "command": "testbenchExtension.generateTestCasesForTestThemeOrTestCaseSet",
+                "title": "Generate Tests",
+                "icon": {
+                    "light": "resources/icons/add.svg",
+                    "dark": "resources/icons/add.svg"
+                }
+            },
+            {
+                "command": "testbenchExtension.fetchReportForSelectedTreeItem",
+                "title": "Fetch Report",
+                "icon": {
+                    "light": "resources/icons/download.svg",
+                    "dark": "resources/icons/download.svg"
+                }
             },
             {
                 "command": "testbenchExtension.makeRoot",
@@ -403,14 +419,19 @@
             ],
             "view/item/context": [
                 {
-                    "command": "testbenchExtension.generateTestCases",
+                    "command": "testbenchExtension.generateTestCasesForCycle",
                     "when": "view == projectManagementTree && viewItem == Cycle",
-                    "group": "inline"
+                    "group": "inline@1"
                 },
                 {
-                    "command": "testbenchExtension.generateTestCasesForTestTheme",
+                    "command": "testbenchExtension.generateTestCasesForTestThemeOrTestCaseSet",
                     "when": "view == testThemeTree && (viewItem == TestThemeNode || viewItem == TestCaseSetNode)",
-                    "group": "inline"
+                    "group": "inline@2"
+                },
+                {
+                    "command": "testbenchExtension.fetchReportForSelectedTreeItem",
+                    "when": "(view == projectManagementTree || view == testThemeTree) && (viewItem == Cycle || viewItem == TestThemeNode || viewItem == TestCaseSetNode)",
+                    "group": "inline@3"
                 },
                 {
                     "command": "testbenchExtension.makeRoot",

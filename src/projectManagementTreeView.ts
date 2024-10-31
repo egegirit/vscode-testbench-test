@@ -221,16 +221,17 @@ export function findProjectKeyOfCycleElement(element: ProjectManagementTreeItem)
 
 // Function to find the serial key of the project of a cycle element in the tree hierarchy
 export function findCycleKeyOfTreeElement(element: ProjectManagementTreeItem): string | undefined {
+    /*
     if ((element.contextValue !== "TestThemeNode") && (element.contextValue !== "TestCaseSetNode")) {
-        console.error("Element is not a test theme.");
+        console.error("Invalid tree element type.");
         return undefined;
-    }
+    }*/
     let currentElement: ProjectManagementTreeItem | null = element;
     while (currentElement) {
         if (currentElement.contextValue === "Cycle") {
-            return currentElement.item.key;
+            return currentElement?.item?.key;
         }
-        currentElement = currentElement.parent;
+        currentElement = currentElement?.parent;
     }
     console.error("Cycle key not found.");
     return undefined;
