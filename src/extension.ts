@@ -129,7 +129,7 @@ export function activate(context: vscode.ExtensionContext) {
             await config.update("workspaceLocation", vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
         }
 
-        if (config.get<boolean>("useDefaultValuesFortestbench2robotframework", true)) {
+        if (config.get<boolean>("useDefaultValuesForTestbench2robotframework")) {
             // For testbench2robotframework configuration, set the generation and resource directory relative to the workspace location
             let defaultTestbench2robotframeworkConfig = types.defaultTestbench2robotframeworkConfig;
             defaultTestbench2robotframeworkConfig.generationDirectory = path.join(
@@ -142,6 +142,7 @@ export function activate(context: vscode.ExtensionContext) {
                 "resources"
             );
             await config.update("testbench2robotframeworkConfig", defaultTestbench2robotframeworkConfig);
+            console.log("Updated testbench2robotframeworkConfig with default values.");
         }
     }
 

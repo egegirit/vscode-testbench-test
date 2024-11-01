@@ -47,7 +47,7 @@
                 },
                 "testbenchExtension.useDefaultValuesForTestbench2robotframework": {
                     "type": "boolean",
-                    "default": true,
+                    "default": false,
                     "description": "Use default values for the testbench2robotframework configuration.",
                     "order": 6
                 },
@@ -231,9 +231,14 @@
                     },
                     "order": 7
                 },
+                "testbenchExtension.outputXMLPath": {
+                    "type": "string",
+                    "description": "The path to the output XML file where robotframework test results are stored.",
+                    "order": 9
+                },
                 "testbenchExtension.clearReportAfterProcessing": {
                     "type": "boolean",
-                    "default": false,
+                    "default": true,
                     "description": "Remove report file after processing.",
                     "order": 8
                 }

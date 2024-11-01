@@ -576,39 +576,43 @@ export async function generateTestsWithTestBenchToRobotFramework(
     try {
         const executionBased = await isExecutionBasedReportSelected();
         if (executionBased === null) {
-            vscode.window.showInformationMessage('Test generation aborted.');
+            vscode.window.showInformationMessage("Test generation aborted.");
             return;
         }
 
-        const UIDofSelectedElement = UIDofTestThemeElementToGenerateTestsFor || await displayAndSelectTestThemeNode(treeItem);
+        const UIDofSelectedElement =
+            UIDofTestThemeElementToGenerateTestsFor || (await displayAndSelectTestThemeNode(treeItem));
         if (!UIDofSelectedElement) {
-            console.error('Test theme selection was empty.');
+            console.error("Test theme selection was empty.");
             return;
         }
 
         const cycleStructureOptions: types.OptionalJobIDRequestParameter = {
             basedOnExecution: executionBased,
-            treeRootUID: UIDofSelectedElement === 'Generate all' ? '' : UIDofSelectedElement,
+            treeRootUID: UIDofSelectedElement === "Generate all" ? "" : UIDofSelectedElement,
         };
 
-        await vscode.window.withProgress({
-            location: vscode.ProgressLocation.Notification,
-            title: `Generating Tests for ${itemLabel}`,
-            cancellable: true,
-        }, async (progress, cancellationToken) => {
-            await runTestGenerationProcess(
-                context,
-                baseKey,
-                projectKey,
-                cycleKey,
-                executionBased,
-                workingDirectory,
-                UIDofSelectedElement,
-                cycleStructureOptions,
-                progress,
-                cancellationToken
-            );
-        });
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Generating Tests for ${itemLabel}`,
+                cancellable: true,
+            },
+            async (progress, cancellationToken) => {
+                await runTestGenerationProcess(
+                    context,
+                    baseKey,
+                    projectKey,
+                    cycleKey,
+                    executionBased,
+                    workingDirectory,
+                    UIDofSelectedElement,
+                    cycleStructureOptions,
+                    progress,
+                    cancellationToken
+                );
+            }
+        );
     } catch (error: any) {
         handleError(error);
     }
@@ -623,8 +627,8 @@ async function displayAndSelectTestThemeNode(treeItem: any): Promise<string | un
     const testThemeNodes = findTestThemeNodes(treeItem);
 
     const quickPickItems = [
-        { label: 'Generate all', description: 'Generate All Tests Under The Test Cycle' },
-        ...testThemeNodes.map(node => ({
+        { label: "Generate all", description: "Generate All Tests Under The Test Cycle" },
+        ...testThemeNodes.map((node) => ({
             label: node.numbering ? `${node.numbering} ${node.name}` : node.name,
             description: `ID: ${node.uniqueID}`,
             uniqueID: node.uniqueID,
@@ -644,14 +648,19 @@ async function displayAndSelectTestThemeNode(treeItem: any): Promise<string | un
  * @param results - An array to collect the results
  * @returns An array of found TestThemeNodes
  */
-function findTestThemeNodes(node: any, results: { name: string; uniqueID: string; numbering?: string }[] = []): typeof results {
-    if (node.item?.elementType === 'TestThemeNode') {
-        const { name = 'Unnamed', uniqueID = 'No ID', numbering } = node.item.base || {};
+function findTestThemeNodes(
+    node: any,
+    results: { name: string; uniqueID: string; numbering?: string }[] = []
+): typeof results {
+    if (node.item?.elementType === "TestThemeNode") {
+        const { name = "Unnamed", uniqueID = "No ID", numbering } = node.item.base || {};
         results.push({ name, uniqueID, numbering });
     }
 
     if (Array.isArray(node.children)) {
-        node.children.forEach((child: projectManagementTreeView.ProjectManagementTreeItem) => findTestThemeNodes(child, results));
+        node.children.forEach((child: projectManagementTreeView.ProjectManagementTreeItem) =>
+            findTestThemeNodes(child, results)
+        );
     }
 
     return results;
@@ -681,7 +690,7 @@ async function runTestGenerationProcess(
     progress: vscode.Progress<{ message?: string; increment?: number }>,
     cancellationToken: vscode.CancellationToken
 ) {
-    progress.report({ increment: 20, message: 'Fetching JSON Report from the server.' });
+    progress.report({ increment: 20, message: "Fetching JSON Report from the server." });
 
     const downloadedReportZipFilePath = await fetchZipFile(
         baseKey,
@@ -694,18 +703,18 @@ async function runTestGenerationProcess(
     );
 
     if (!downloadedReportZipFilePath) {
-        console.warn('Download canceled or failed.');
+        console.warn("Download canceled or failed.");
         return;
     }
 
-    progress.report({ increment: 20, message: 'Generating test cases with testbench2robotframework.' });
+    progress.report({ increment: 20, message: "Generating test cases with testbench2robotframework." });
 
-    const workspacePath = vscode.workspace.getConfiguration(baseKey).get<string>('workspaceLocation')!;
+    const workspacePath = vscode.workspace.getConfiguration(baseKey).get<string>("workspaceLocation")!;
     const workingDirectoryFullPath = path.join(workspacePath, workingDirectory);
 
     const configFilePath = await saveTestbench2RobotConfigurationAsJson(baseKey, workingDirectoryFullPath);
     if (!configFilePath) {
-        console.error('Failed to save configuration file.');
+        console.error("Failed to save configuration file.");
         return;
     }
     const isSuccess = await tb2robotLib.startTb2robotWrite(
@@ -715,7 +724,7 @@ async function runTestGenerationProcess(
         configFilePath
     );
 
-    if (!await handleExecutionError(workingDirectoryFullPath, isSuccess, downloadedReportZipFilePath)) {
+    if (!(await handleExecutionError(workingDirectoryFullPath, isSuccess, downloadedReportZipFilePath))) {
         return;
     }
 
@@ -737,14 +746,19 @@ function updateLastGeneratedReportParams(UID: string, projectKey: string, cycleK
 /**
  * Clean up temporary files and configurations.
  */
-async function cleanUp(configFilePath: string, reportZipFilePath: string, baseKey: string, workingDirectoryFullPath: string) {
+async function cleanUp(
+    configFilePath: string,
+    reportZipFilePath: string,
+    baseKey: string,
+    workingDirectoryFullPath: string
+) {
     await deleteConfigurationFile(configFilePath);
 
-    if (vscode.workspace.getConfiguration(baseKey).get<boolean>('clearReportAfterProcessing')) {
+    if (vscode.workspace.getConfiguration(baseKey).get<boolean>("clearReportAfterProcessing")) {
         await removeReportZipFile(reportZipFilePath);
     }
 
-    vscode.window.showInformationMessage('Test generation done.');
+    vscode.window.showInformationMessage("Test generation done.");
 }
 
 /**
@@ -752,10 +766,10 @@ async function cleanUp(configFilePath: string, reportZipFilePath: string, baseKe
  */
 function handleError(error: any) {
     if (error instanceof vscode.CancellationError) {
-        console.log('Process cancelled by the user.');
-        vscode.window.showInformationMessage('Process cancelled by the user.');
+        console.log("Process cancelled by the user.");
+        vscode.window.showInformationMessage("Process cancelled by the user.");
     } else {
-        console.error('An error occurred:', error);
+        console.error("An error occurred:", error);
         vscode.window.showErrorMessage(`An error occurred: ${error.message || error}`);
     }
 }
@@ -844,6 +858,7 @@ export async function findFileRecursively(dir: string, fileName: string): Promis
                     return result;
                 }
             } else if (stat.isFile() && file === fileName) {
+                console.log(`File found: ${fullPath}`);
                 return fullPath;
             }
         }
@@ -856,8 +871,22 @@ export async function findFileRecursively(dir: string, fileName: string): Promis
 
 async function chooseRobotXMLFile(workingDirectoryFullPath: string): Promise<string | undefined> {
     // Open file selection dialog, filtered for XML files
+
+    const config = vscode.workspace.getConfiguration(baseKey);
+    let outputXMLFolderFullPath = config.get<string>("outputXMLPath");
+    if (!outputXMLFolderFullPath) {
+        console.warn("Output XML path is not configured.");
+    } else {
+        const outputXmlFilePath = await findFileRecursively(outputXMLFolderFullPath, "output.xml");
+        if (outputXmlFilePath) {
+            return outputXmlFilePath;
+        }
+    }
+
     const selectedFiles = await vscode.window.showOpenDialog({
-        defaultUri: vscode.Uri.file(workingDirectoryFullPath),
+        defaultUri: outputXMLFolderFullPath
+            ? vscode.Uri.file(outputXMLFolderFullPath)
+            : vscode.Uri.file(workingDirectoryFullPath),
         canSelectFiles: true,
         canSelectMany: false,
         title: "Select Output XML File",
@@ -935,7 +964,12 @@ export async function readTestResultsAndCreateReportWithResults(
 
             reportProgress(`Fetching report.`, reportIncrement);
 
-            if (!lastGeneratedReportParams.executionBased || !lastGeneratedReportParams.projectKey || !lastGeneratedReportParams.cycleKey || !lastGeneratedReportParams.UID) {
+            if (
+                !lastGeneratedReportParams.executionBased ||
+                !lastGeneratedReportParams.projectKey ||
+                !lastGeneratedReportParams.cycleKey ||
+                !lastGeneratedReportParams.UID
+            ) {
                 throw new Error("Last generated report parameters are missing.");
             }
 
@@ -954,14 +988,18 @@ export async function readTestResultsAndCreateReportWithResults(
 
             reportProgress(`Working on report.`, reportIncrement);
 
-            const reportWithResultsZipFilePath = downloadedReportZipFilePath ?? await chooseReportWithouResultsZipFile(workingDirectoryFullPath);
+            const reportWithResultsZipFilePath =
+                downloadedReportZipFilePath ?? (await chooseReportWithouResultsZipFile(workingDirectoryFullPath));
             if (!reportWithResultsZipFilePath) {
                 throw new Error("No report file selected.");
             }
 
             reportProgress(`Preparing configuration for testbench2robotframework.`, reportIncrement / 2);
 
-            const tb2robotConfigFilePath = await saveTestbench2RobotConfigurationAsJson(baseKey, workingDirectoryFullPath);
+            const tb2robotConfigFilePath = await saveTestbench2RobotConfigurationAsJson(
+                baseKey,
+                workingDirectoryFullPath
+            );
             if (!tb2robotConfigFilePath) {
                 throw new Error("Failed to create configuration file.");
             }
@@ -979,7 +1017,13 @@ export async function readTestResultsAndCreateReportWithResults(
                 tb2robotConfigFilePath
             );
 
-            if (!await handleExecutionError(workingDirectoryFullPath, isExecutionSuccessful, reportWithResultsZipFilePath)) {
+            if (
+                !(await handleExecutionError(
+                    workingDirectoryFullPath,
+                    isExecutionSuccessful,
+                    reportWithResultsZipFilePath
+                ))
+            ) {
                 return;
             }
 
