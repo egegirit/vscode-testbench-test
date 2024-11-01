@@ -7,7 +7,7 @@
 # Ignore compiled output folder
 out/
 
-bundled/libs/bin/
+## Typescript 
 
 # Logs
 logs

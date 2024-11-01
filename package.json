@@ -45,6 +45,12 @@
                     "description": "The path to the workspace or project directory on the local machine for storing local files.",
                     "order": 5
                 },
+                "testbenchExtension.useDefaultValuesForTestbench2robotframework": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Use default values for the testbench2robotframework configuration.",
+                    "order": 6
+                },
                 "testbenchExtension.testbench2robotframeworkConfig": {
                     "type": "object",
                     "default": {
@@ -223,13 +229,13 @@
                             }
                         }
                     },
-                    "scope": "Other Settings"
+                    "order": 7
                 },
                 "testbenchExtension.clearReportAfterProcessing": {
                     "type": "boolean",
                     "default": false,
                     "description": "Remove report file after processing.",
-                    "order": 6
+                    "order": 8
                 }
             }
         },
@@ -262,16 +268,16 @@
                 "command": "testbenchExtension.generateTestCasesForCycle",
                 "title": "Generate Tests",
                 "icon": {
-                    "light": "resources/icons/add.svg",
-                    "dark": "resources/icons/add.svg"
+                    "light": "resources/icons/robot_dark.svg",
+                    "dark": "resources/icons/robot_dark.svg"
                 }
             },
             {
                 "command": "testbenchExtension.generateTestCasesForTestThemeOrTestCaseSet",
                 "title": "Generate Tests",
                 "icon": {
-                    "light": "resources/icons/add.svg",
-                    "dark": "resources/icons/add.svg"
+                    "light": "resources/icons/robot_dark.svg",
+                    "dark": "resources/icons/robot_dark.svg"
                 }
             },
             {
@@ -300,14 +306,6 @@
                 "icon": {
                     "light": "resources/icons/read.svg",
                     "dark": "resources/icons/read.svg"
-                }
-            },
-            {
-                "command": "testbenchExtension.executeRobotFrameworkTests",
-                "title": "TestBench: Execute Tests",
-                "icon": {
-                    "light": "resources/icons/run.svg",
-                    "dark": "resources/icons/run.svg"
                 }
             },
             {
@@ -346,6 +344,14 @@
                 "icon": {
                     "light": "resources/icons/settings.svg",
                     "dark": "resources/icons/settings.svg"
+                }
+            },
+            {
+                "command": "testbenchExtension.readAndUploadTestResultsToTestbench",
+                "title": "TestBench: Read Tests & Upload Results To Testbench",
+                "icon": {
+                    "light": "resources/icons/Upload.svg",
+                    "dark": "resources/icons/Upload.svg"
                 }
             },
             {
@@ -397,23 +403,13 @@
                     "when": "view == projectManagementTree || view == testThemeTree"
                 },
                 {
-                    "command": "testbenchExtension.executeRobotFrameworkTests",
-                    "group": "navigation@4",
-                    "when": "view == projectManagementTree || view == testThemeTree"
-                },
-                {
-                    "command": "testbenchExtension.readRFTestResultsAndCreateReportWithResults",
+                    "command": "testbenchExtension.readAndUploadTestResultsToTestbench",
                     "group": "navigation@5",
                     "when": "view == projectManagementTree || view == testThemeTree"
                 },
                 {
-                    "command": "testbenchExtension.uploadTestResultsToTestbench",
-                    "group": "navigation@6",
-                    "when": "view == projectManagementTree || view == testThemeTree"
-                },
-                {
                     "command": "testbenchExtension.showExtensionSettings",
-                    "group": "navigation@7",
+                    "group": "navigation@6",
                     "when": "view == projectManagementTree || view == testThemeTree"
                 }
             ],
@@ -427,11 +423,6 @@
                     "command": "testbenchExtension.generateTestCasesForTestThemeOrTestCaseSet",
                     "when": "view == testThemeTree && (viewItem == TestThemeNode || viewItem == TestCaseSetNode)",
                     "group": "inline@2"
-                },
-                {
-                    "command": "testbenchExtension.fetchReportForSelectedTreeItem",
-                    "when": "(view == projectManagementTree || view == testThemeTree) && (viewItem == Cycle || viewItem == TestThemeNode || viewItem == TestCaseSetNode)",
-                    "group": "inline@3"
                 },
                 {
                     "command": "testbenchExtension.makeRoot",
