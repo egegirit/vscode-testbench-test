@@ -261,6 +261,11 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(commands.login.command, async () => {
             if (insideLogin) {
                 console.log("Already inside login..");
+
+                // If somehow login is stuck, reset the insideLogin flag after 10 seconds to avoid blocking the login process.
+                setTimeout(() => {
+                    insideLogin = false;
+                }, 5 * 1000);
                 return;
             }
             insideLogin = true;

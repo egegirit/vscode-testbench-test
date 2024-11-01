@@ -202,11 +202,8 @@ export async function pollJobStatus(
             console.error(`Attempt ${attempt}: Failed to get job status. Error: ${error}`);
         }
 
-        if (progress) {
-            progress.report({
-                message: `Fetching Job status. Attempt ${attempt}.`,
-            });
-        }
+        // Update the progress bar, if provided
+        progress?.report({ message: `Fetching job status. Attempt ${attempt}.` });
 
         // (Optional) Check if the maximum polling time has been exceeded.
         if (maxPollingTimeMs !== undefined) {
@@ -557,14 +554,14 @@ async function handleExecutionError(
 
 /**
  * Generate Robot Framework test cases from the TestBench JSON report.
- * @param treeItem The selected tree item
- * @param itemLabel The label of the selected tree item
- * @param baseKey The base key of the extension
- * @param projectKey The project key
- * @param cycleKey The cycle key
- * @param workingDirectory The path to save the downloaded report
- * @param UIDofTestThemeElementToGenerateTestsFor (Optinal) The uniqueID of the clicked TestThemeNode element to generate tests for
- * @returns Promise<void>
+ * @param context - VS Code extension context
+ * @param treeItem - The selected tree item
+ * @param itemLabel - The label of the selected tree item
+ * @param baseKey - The base key of the extension
+ * @param projectKey - The project key
+ * @param cycleKey - The cycle key
+ * @param workingDirectory - The path to save the downloaded report
+ * @param UIDofTestThemeElementToGenerateTestsFor - (Optional) The unique ID of the clicked TestThemeNode element to generate tests for
  */
 export async function generateTestsWithTestBenchToRobotFramework(
     context: vscode.ExtensionContext,
@@ -576,212 +573,191 @@ export async function generateTestsWithTestBenchToRobotFramework(
     workingDirectory: string,
     UIDofTestThemeElementToGenerateTestsFor?: string
 ): Promise<void> {
-    // Execution based or specification based request parameter
-    const executionBased = await isExecutionBasedReportSelected();
-    // console.log("executionBased value set to:", executionBased);
-    if (executionBased === null) {
-        console.log(`Test generation aborted.`);
-        vscode.window.showInformationMessage(`Test generation aborted.`);
-        return;
-    }
-
-    /* 
-    Code for storing treeItem variable as a json file to analyze its structure while removing its parent property to avoid circular reference
-    // Function to remove the parent property from an object recursively
-    function removeParentProperty(obj: any): any {
-        if (Array.isArray(obj)) {
-            return obj.map(removeParentProperty);
-        } else if (obj !== null && typeof obj === "object") {
-            const newObj: any = {};
-            for (const key in obj) {
-                if (key !== "parent") {
-                    newObj[key] = removeParentProperty(obj[key]);
-                }
-            }
-            return newObj;
-        }
-        return obj;
-    }
-    // Remove the parent property from treeItem
-    const treeItemWithoutParent = removeParentProperty(treeItem);
-    // Save the contents of the variable called treeItemWithoutParent to a file called treeItem.json
-    const treeItemJsonPath = path.join(getWorkspaceFolder(), "treeItem.json");
-    await fs.promises.writeFile(treeItemJsonPath, JSON.stringify(treeItemWithoutParent, null, 2), "utf8");
-    */
-
-    // Display all TestThemeNode elements in a QuickPick and return the uniqueID of the selected item
-    // to generate tests for only that item or generate all tests.
-    async function showTestThemeNodes(treeItem: any): Promise<string | undefined> {
-        // Recursively find all TestThemeNode elements in treeItem
-        function findTestThemeNodes(node: any, results: { name: string; uniqueID: string; numbering?: string }[] = []) {
-            if (node.item?.elementType === "TestThemeNode") {
-                const name = node.item.base?.name || "Unnamed";
-                const uniqueID = node.item.base?.uniqueID || "No ID";
-                const numbering = node.item.base?.numbering;
-                results.push({ name, uniqueID, numbering });
-            }
-
-            if (Array.isArray(node.children)) {
-                node.children.forEach((child: any) => findTestThemeNodes(child, results));
-            }
-
-            return results;
+    try {
+        const executionBased = await isExecutionBasedReportSelected();
+        if (executionBased === null) {
+            vscode.window.showInformationMessage('Test generation aborted.');
+            return;
         }
 
-        const testThemeNodes = findTestThemeNodes(treeItem);
-
-        // Map the found nodes to a QuickPick items array
-        const quickPickItems = [
-            { label: "Generate all", description: "Generate All Tests Under The Test Cycle" }, // "Generate all" option is displayed first
-            ...testThemeNodes.map((node) => ({
-                label: node.numbering ? `${node.numbering} ${node.name}` : node.name,
-                description: `ID: ${node.uniqueID}`,
-                uniqueID: node.uniqueID,
-            })),
-        ];
-
-        // Show the QuickPick prompt and return the uniqueID of the selected item
-        const selected = await vscode.window.showQuickPick(quickPickItems, {
-            placeHolder: 'Select a test theme or select "Generate all" to generate all tests under the cycle.',
-        });
-
-        if (!selected) {
-            return undefined;
+        const UIDofSelectedElement = UIDofTestThemeElementToGenerateTestsFor || await displayAndSelectTestThemeNode(treeItem);
+        if (!UIDofSelectedElement) {
+            console.error('Test theme selection was empty.');
+            return;
         }
 
-        // Return "Generate all" if that option was selected, otherwise the uniqueID
-        return selected?.label === "Generate all" ? "Generate all" : (selected as { uniqueID: string }).uniqueID;
-    }
+        const cycleStructureOptions: types.OptionalJobIDRequestParameter = {
+            basedOnExecution: executionBased,
+            treeRootUID: UIDofSelectedElement === 'Generate all' ? '' : UIDofSelectedElement,
+        };
 
-    // If the user clicks "Generate Test Cases" button for a test theme, its UID is automatically passed to this function.
-    // If the user clicks "Generate Test Cases" button for a test cycle, list and get the uniqueID of the selected TestThemeNode element
-    let UIDofSelectedElement;
-    if (UIDofTestThemeElementToGenerateTestsFor) {
-        UIDofSelectedElement = UIDofTestThemeElementToGenerateTestsFor;
-    } else {
-        UIDofSelectedElement = await showTestThemeNodes(treeItem);
-    }
-
-    if (!UIDofSelectedElement) {
-        console.error(`Test theme selection was empty.`);
-        // vscode.window.showWarningMessage(`Test theme selection was empty.`);
-        return;
-    }
-
-    const cycleStructureOptionsRequestParameter: types.OptionalJobIDRequestParameter = {
-        basedOnExecution: executionBased,
-        treeRootUID: UIDofSelectedElement === "Generate all" ? "" : UIDofSelectedElement,
-    };
-
-    // console.log(`Started Test generation.`);
-    // vscode.window.showInformationMessage(`Started Test generation.`);
-
-    // Show a progress bar while the process is running, since this process takes time
-    await vscode.window.withProgress(
-        {
+        await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
             title: `Generating Tests for ${itemLabel}`,
             cancellable: true,
-        },
-        async (progress, cancellationToken) => {
-            try {
-                if (progress) {
-                    progress.report({
-                        increment: 20,
-                        message: `Fetching JSON Report from the server.`,
-                    });
-                }
+        }, async (progress, cancellationToken) => {
+            await runTestGenerationProcess(
+                context,
+                baseKey,
+                projectKey,
+                cycleKey,
+                executionBased,
+                workingDirectory,
+                UIDofSelectedElement,
+                cycleStructureOptions,
+                progress,
+                cancellationToken
+            );
+        });
+    } catch (error: any) {
+        handleError(error);
+    }
+}
 
-                // Fetch the ZIP file from the server, passing the cancellationToken
-                const downloadedReportZipFilePath = await fetchZipFile(
-                    baseKey,
-                    projectKey,
-                    cycleKey,
-                    workingDirectory,
-                    cycleStructureOptionsRequestParameter,
-                    progress,
-                    cancellationToken // Pass the cancellationToken here
-                );
+/**
+ * Show a QuickPick for selecting a TestThemeNode.
+ * @param treeItem - The tree item to search for TestThemeNodes
+ * @returns The unique ID of the selected TestThemeNode or 'Generate all'
+ */
+async function displayAndSelectTestThemeNode(treeItem: any): Promise<string | undefined> {
+    const testThemeNodes = findTestThemeNodes(treeItem);
 
-                if (!downloadedReportZipFilePath) {
-                    console.warn("Download canceled or failed.");
-                    return; // Exit if the download was canceled or failed
-                }
+    const quickPickItems = [
+        { label: 'Generate all', description: 'Generate All Tests Under The Test Cycle' },
+        ...testThemeNodes.map(node => ({
+            label: node.numbering ? `${node.numbering} ${node.name}` : node.name,
+            description: `ID: ${node.uniqueID}`,
+            uniqueID: node.uniqueID,
+        })),
+    ];
 
-                if (progress) {
-                    progress.report({
-                        increment: 20,
-                        message: `Generating test cases with testbench2robotframework.`,
-                    });
-                }
+    const selected = await vscode.window.showQuickPick(quickPickItems, {
+        placeHolder: 'Select a test theme or "Generate all" to generate all tests under the cycle.',
+    });
 
-                // @@ Start of testbench2robotframework library
-                const config = vscode.workspace.getConfiguration(baseKey);
-                const workspacePath = config.get<string>("workspaceLocation");
-                const workingDirectoryFullPath = path.join(workspacePath!, workingDirectory);
+    return selected?.label === "Generate all" ? "Generate all" : (selected as { uniqueID: string })?.uniqueID;
+}
 
-                // Create configuration json object called testbench2robotframeworkConfig.json
-                const tb2robotConfigFilePath = await saveTestbench2RobotConfigurationAsJson(
-                    baseKey,
-                    workingDirectoryFullPath
-                );
+/**
+ * Find all TestThemeNode elements recursively.
+ * @param node - The node to search
+ * @param results - An array to collect the results
+ * @returns An array of found TestThemeNodes
+ */
+function findTestThemeNodes(node: any, results: { name: string; uniqueID: string; numbering?: string }[] = []): typeof results {
+    if (node.item?.elementType === 'TestThemeNode') {
+        const { name = 'Unnamed', uniqueID = 'No ID', numbering } = node.item.base || {};
+        results.push({ name, uniqueID, numbering });
+    }
 
-                // Stop execution if any of the commands fails
-                let isExecutionSuccessfull = true;
-                if (!tb2robotConfigFilePath) {
-                    isExecutionSuccessfull = await tb2robotLib.startTb2robotWrite(
-                        context,
-                        workingDirectoryFullPath,
-                        downloadedReportZipFilePath,
-                        undefined
-                    );
-                } else {
-                    isExecutionSuccessfull = await tb2robotLib.startTb2robotWrite(
-                        context,
-                        workingDirectoryFullPath,
-                        downloadedReportZipFilePath,
-                        tb2robotConfigFilePath
-                    );
-                }
+    if (Array.isArray(node.children)) {
+        node.children.forEach((child: projectManagementTreeView.ProjectManagementTreeItem) => findTestThemeNodes(child, results));
+    }
 
-                if (
-                    !(await handleExecutionError(
-                        workingDirectoryFullPath,
-                        isExecutionSuccessfull,
-                        downloadedReportZipFilePath
-                    ))
-                ) {
-                    return;
-                }
-                console.log(`Robot write executed.`);
+    return results;
+}
 
-                // Set the last generated report parameters so that the read command can fetch a new report with these parameters.
-                lastGeneratedReportParams.UID = UIDofSelectedElement;
-                lastGeneratedReportParams.projectKey = projectKey;
-                lastGeneratedReportParams.cycleKey = cycleKey;
-                lastGeneratedReportParams.executionBased = executionBased;
+/**
+ * Run the test generation process with progress and cancellation support.
+ * @param context - VS Code extension context
+ * @param baseKey - The base key of the extension
+ * @param projectKey - The project key
+ * @param cycleKey - The cycle key
+ * @param workingDirectory - The working directory path
+ * @param UIDofSelectedElement - The unique ID of the selected element
+ * @param cycleStructureOptions - Request parameters for cycle structure
+ * @param progress - VS Code progress reporter
+ * @param cancellationToken - VS Code cancellation token
+ */
+async function runTestGenerationProcess(
+    context: vscode.ExtensionContext,
+    baseKey: string,
+    projectKey: string,
+    cycleKey: string,
+    executionBased: boolean,
+    workingDirectory: string,
+    UIDofSelectedElement: string,
+    cycleStructureOptions: types.OptionalJobIDRequestParameter,
+    progress: vscode.Progress<{ message?: string; increment?: number }>,
+    cancellationToken: vscode.CancellationToken
+) {
+    progress.report({ increment: 20, message: 'Fetching JSON Report from the server.' });
 
-                // Delete created json config file after usage
-                await deleteConfigurationFile(getConfigurationFilePath(workingDirectoryFullPath));
-
-                if (config.get<boolean>("clearReportAfterProcessing")) {
-                    // Remove the downloaded report zip file after usage
-                    await removeReportZipFile(downloadedReportZipFilePath);
-                }
-
-                vscode.window.showInformationMessage(`Test generation done.`);
-            } catch (error: any) {
-                if (error instanceof vscode.CancellationError) {
-                    console.log("Process cancelled by the user.");
-                    vscode.window.showInformationMessage("Process cancelled by the user.");
-                } else {
-                    console.error("An error occurred:", error);
-                    vscode.window.showErrorMessage(`An error occurred: ${error.message || error}`);
-                }
-                return; // Exit the progress function
-            }
-        }
+    const downloadedReportZipFilePath = await fetchZipFile(
+        baseKey,
+        projectKey,
+        cycleKey,
+        workingDirectory,
+        cycleStructureOptions,
+        progress,
+        cancellationToken
     );
+
+    if (!downloadedReportZipFilePath) {
+        console.warn('Download canceled or failed.');
+        return;
+    }
+
+    progress.report({ increment: 20, message: 'Generating test cases with testbench2robotframework.' });
+
+    const workspacePath = vscode.workspace.getConfiguration(baseKey).get<string>('workspaceLocation')!;
+    const workingDirectoryFullPath = path.join(workspacePath, workingDirectory);
+
+    const configFilePath = await saveTestbench2RobotConfigurationAsJson(baseKey, workingDirectoryFullPath);
+    if (!configFilePath) {
+        console.error('Failed to save configuration file.');
+        return;
+    }
+    const isSuccess = await tb2robotLib.startTb2robotWrite(
+        context,
+        workingDirectoryFullPath,
+        downloadedReportZipFilePath,
+        configFilePath
+    );
+
+    if (!await handleExecutionError(workingDirectoryFullPath, isSuccess, downloadedReportZipFilePath)) {
+        return;
+    }
+
+    updateLastGeneratedReportParams(UIDofSelectedElement, projectKey, cycleKey, executionBased);
+
+    await cleanUp(configFilePath, downloadedReportZipFilePath, baseKey, workingDirectoryFullPath);
+}
+
+/**
+ * Update the parameters for the last generated report.
+ */
+function updateLastGeneratedReportParams(UID: string, projectKey: string, cycleKey: string, executionBased: boolean) {
+    lastGeneratedReportParams.UID = UID;
+    lastGeneratedReportParams.projectKey = projectKey;
+    lastGeneratedReportParams.cycleKey = cycleKey;
+    lastGeneratedReportParams.executionBased = executionBased;
+}
+
+/**
+ * Clean up temporary files and configurations.
+ */
+async function cleanUp(configFilePath: string, reportZipFilePath: string, baseKey: string, workingDirectoryFullPath: string) {
+    await deleteConfigurationFile(configFilePath);
+
+    if (vscode.workspace.getConfiguration(baseKey).get<boolean>('clearReportAfterProcessing')) {
+        await removeReportZipFile(reportZipFilePath);
+    }
+
+    vscode.window.showInformationMessage('Test generation done.');
+}
+
+/**
+ * Handle errors gracefully.
+ */
+function handleError(error: any) {
+    if (error instanceof vscode.CancellationError) {
+        console.log('Process cancelled by the user.');
+        vscode.window.showInformationMessage('Process cancelled by the user.');
+    } else {
+        console.error('An error occurred:', error);
+        vscode.window.showErrorMessage(`An error occurred: ${error.message || error}`);
+    }
 }
 
 /**
@@ -1199,21 +1175,6 @@ function getConfigurationFilePath(pathToJsonConfig: string): string {
 }
 
 /**
- * Retrieves the path of the currently opened workspace folder.
- * @returns The path of the currently opened workspace folder.
- */
-function getWorkspaceFolder(): string {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-        throw new Error("No workspace folder is open. Please open a workspace to save the configuration file.");
-    }
-
-    // Handle multiple workspace folders differently
-    return workspaceFolders[0].uri.fsPath;
-}
-
-/**
  * Deletes a file from the system if it exists.
  * @param configFilePath The path to the configuration file to be deleted
  * @returns Promise<void>
@@ -1237,50 +1198,6 @@ export async function deleteConfigurationFile(configFilePath: string): Promise<v
 }
 
 // TEST CODE FOR AUTOMATING THE WHOLE PROCESS
-
-/**
- * Executes the 'tb2robot write' command in the VS Code terminal with the provided report zip file name.
- * @param cycleReportZipFileName - The name of the zip file to be processed by 'tb2robot write' command.
- */
-export async function executeTb2RobotWriteCommand(
-    terminal: vscode.Terminal,
-    cycleReportZipFileName: string,
-    terminalCodeExecutionPath?: string // Optinal configuration file path for the command
-): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-        try {
-            // Validate the input to ensure it's a non-empty string
-            if (!cycleReportZipFileName || typeof cycleReportZipFileName !== "string") {
-                throw new Error("Invalid zip file name provided.");
-            }
-
-            // Ensure the file has a .zip extension
-            if (!cycleReportZipFileName.endsWith(".zip")) {
-                throw new Error("The provided file is not a .zip file.");
-            }
-
-            // Create or get an existing terminal named 'tb2robot'
-            // const terminal = getOrCreateTerminal("tb2robot");
-
-            // Execute the command in the terminal
-            terminal.show(true); // Show the terminal and focus on it
-            if (terminalCodeExecutionPath) {
-                terminal.sendText(`tb2robot write -c ${terminalCodeExecutionPath} ${cycleReportZipFileName}`);
-            } else {
-                terminal.sendText(`tb2robot write ${cycleReportZipFileName}`);
-            }
-
-            // Optional: Inform the user the command was executed
-            console.log(`Executing: tb2robot write ${cycleReportZipFileName}`);
-        } catch (error) {
-            console.error("Failed to execute command tb2robot write:", error);
-            // Display any errors encountered during execution
-            vscode.window.showErrorMessage(`Failed to execute command tb2robot write: ${error}`);
-        } finally {
-            resolve(); // Resolve promise when terminal execution is complete
-        }
-    });
-}
 
 /**
  * Retrieves an existing terminal or creates a new one if it doesn't exist.
@@ -1329,48 +1246,6 @@ export async function executeRobotDryRunCommand(
             console.error("Failed to execute command robot --dryrun:", error);
             // Display any errors encountered during execution
             vscode.window.showErrorMessage(`Failed to execute command robot --dryrun:: ${error}`);
-        } finally {
-            resolve(); // Resolve promise when terminal execution is complete
-        }
-    });
-}
-
-/**
- * Executes the 'tb2robot read' command in the VS Code terminal with specified parameters.
- * @param reportWithoutResultsZip - The name of the cycle zip file to be read by 'tb2robot'.
- * @param robotframeworkResultXML - The output file path (default is 'output/output.xml').
- * @param reportWithResultsZip - The report file to be generated (default is 'ReportWithResults.zip').
- */
-export async function executeTb2RobotReadCommand(
-    terminal: vscode.Terminal,
-    robotframeworkResultXML: string = "output/output.xml",
-    reportWithResultsZip: string = "ReportWithResults.zip",
-    reportWithoutResultsZip: string
-): Promise<void> {
-    return new Promise(async (resolve, reject) => {
-        try {
-            // Validate input parameters to ensure they are non-empty strings
-            if (!reportWithoutResultsZip || typeof reportWithoutResultsZip !== "string") {
-                throw new Error("Invalid cycle zip file provided.");
-            }
-            if (!robotframeworkResultXML || typeof robotframeworkResultXML !== "string") {
-                throw new Error("Invalid output file path provided.");
-            }
-            if (!reportWithResultsZip || typeof reportWithResultsZip !== "string") {
-                throw new Error("Invalid report zip file provided.");
-            }
-
-            // Construct the command with specified parameters
-            const command = `tb2robot read -o ${robotframeworkResultXML} -r ${reportWithResultsZip} ${reportWithoutResultsZip}`;
-            terminal.show(true); // Show and focus the terminal
-            terminal.sendText(command);
-
-            // Inform the user that the command was executed
-            console.log(`Executing command: ${command}`);
-        } catch (error) {
-            console.error("Failed to execute command tb2robot read:", error);
-            // Display any errors encountered during execution
-            vscode.window.showErrorMessage(`Failed to execute command tb2robot read: ${error}`);
         } finally {
             resolve(); // Resolve promise when terminal execution is complete
         }
