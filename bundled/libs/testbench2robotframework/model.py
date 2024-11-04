@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional
+from typing import List, Optional
 
 
 class StrEnum(str, Enum):
@@ -277,7 +277,7 @@ class UserReference:
     def from_dict(cls, dictionary):
         if dictionary is None:
             return None
-        return cls(key=dictionary.get("key", ""), name=dictionary.get("name", ""))
+        return cls(key=dictionary.get("key", "-1"), name=dictionary.get("name", ""))
 
 
 @dataclass
@@ -466,6 +466,7 @@ class TestCaseSummary:
 @dataclass
 class TestCaseExecutionDetails:
     key: str
+    version: Optional[str]
     status: ActivityStatus
     execStatus: ExecStatus
     verdict: VerdictStatus
@@ -473,7 +474,6 @@ class TestCaseExecutionDetails:
     actualDuration: int
     currentUser: UserReference
     comments: str  # TODO: Insert htmlComment
-    version: Optional[str]
     defects: list[str]
     udfs: list[UserDefinedField]
     keywords: list[Keyword]
@@ -491,9 +491,9 @@ class TestCaseExecutionDetails:
             plannedDuration=dictionary.get("plannedDuration", 0),
             actualDuration=dictionary.get("actualDuration", 0),
             currentUser=UserReference.from_dict(dictionary.get("currentUser", {})),
-            tester=UserReference.from_dict(dictionary.get("tester", {}))
-            if dictionary.get("tester")
-            else None,
+            # tester=UserReference.from_dict(dictionary.get("tester", {}))
+            # if dictionary.get("tester")
+            # else None,
             comments=dictionary.get("comments", ""),
             version=dictionary.get("version", None),
             defects=dictionary.get("defects", []),
@@ -541,6 +541,7 @@ class InteractionExecutionSummary:
     comments: str
     # references: List[Reference]  #TODO: MUST BE CHANGED IN THE FUTURE AGAIN!!!
     references: list[str]
+    defects: Optional[List]
 
     @classmethod
     def from_dict(cls, dictionary):
@@ -549,11 +550,10 @@ class InteractionExecutionSummary:
             time=dictionary.get("time", ""),
             duration=dictionary.get("duration", 0),
             currentUser=UserReference.from_dict(dictionary.get("currentUser", {})),
-            tester=UserReference.from_dict(dictionary.get("tester"))
-            if dictionary.get("tester")
-            else None,
+            tester=None,
             comments=dictionary.get("comments", ""),
             references=dictionary.get("references", []),
+            defects = []
         )
 
 
@@ -572,7 +572,7 @@ class InteractionSpecificationSummary:
     @classmethod
     def from_dict(cls, dictionary):
         return cls(
-            callKey=dictionary.get("callId", ""),
+            callKey=dictionary.get("callKey", ""),
             sequencePhase=SequencePhase(dictionary.get("sequencePhase", SequencePhase.TestStep)),
             callType=InteractionCallType(dictionary.get("callType", InteractionCallType.Flow)),
             description=dictionary.get("description", ""),
@@ -651,6 +651,7 @@ class InteractionDetails:
     parameters: list[ParameterSummary]
     interactions: list[InteractionDetails]
 
+
     @classmethod
     def from_dict(cls, dictionary):
         return cls(
@@ -680,9 +681,10 @@ class InteractionDetails:
 class TestCaseDetails:
     uniqueID: str
     spec: TestCaseSpecificationDetails
+    exec: TestCaseExecutionDetails
     interactions: list[InteractionDetails]
     parameters: list[ParameterSummary]
-    exec: Optional[TestCaseExecutionDetails] = None
+    origin: str = None
 
     @classmethod
     def from_dict(cls, dictionary) -> TestCaseDetails:
@@ -700,6 +702,7 @@ class TestCaseDetails:
                 ParameterSummary.from_dict(parameter)
                 for parameter in dictionary.get("parameters", [])
             ],
+            origin=None
         )
 
 
@@ -929,7 +932,7 @@ class ProtocolTestCaseExecutionSummary:
             durationMillis=dictionary.get("durationMillis"),
             result=ProtocolTestCaseResult.from_dict(dictionary.get("result", {})),
             comments=ProtocolComments.from_dict(dictionary.get("comments", {})),
-            testerKey=dictionary.get("testerKey"),
+            # testerKey=dictionary.get("testerKey"),
             defects=dictionary.get("defects"),
             udfs=[ProtocolUdf.from_dict(udf) for udf in dict_udfs] if dict_udfs else None,
         )

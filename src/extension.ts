@@ -203,7 +203,8 @@ export function activate(context: vscode.ExtensionContext) {
     );
     vscode.commands.executeCommand("setContext", "testbenchExtension.connectionActive", connection !== null); // Login/Logout icon changes based on connection status
 
-    // Register the "Display Commands" command
+    // TODO: Remove this command
+    // Register the "Display Commands" command    
     context.subscriptions.push(
         vscode.commands.registerCommand(commands.displayCommands.command, async () => {
             // Display the commands based on the connection status. (Logout etc. is only available if connection is active)
@@ -286,7 +287,7 @@ export function activate(context: vscode.ExtensionContext) {
                 })
                 .finally(() => {
                     // Reset insideLogin after the login attempt is fully completed
-                    insideLogin = false;
+                    insideLogin = false;                    
                 });
         })
     );

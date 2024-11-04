@@ -386,7 +386,7 @@
                     "command": "testbenchExtension.login",
                     "group": "navigation@1",
                     "title": "Testbench: Login",
-                    "when": "!testbenchExtension.connectionActive && (view == projectManagementTree || view == testThemeTree)",
+                    "when": "!testbenchExtension.connectionActive && (view == projectManagementTree)",
                     "icon": {
                         "light": "resources/icons/login.svg",
                         "dark": "resources/icons/login.svg"
@@ -396,7 +396,7 @@
                     "command": "testbenchExtension.logout",
                     "group": "navigation@2",
                     "title": "Testbench: Logout",
-                    "when": "testbenchExtension.connectionActive && (view == projectManagementTree || view == testThemeTree)",
+                    "when": "testbenchExtension.connectionActive && (view == projectManagementTree)",
                     "icon": {
                         "light": "resources/icons/logout.svg",
                         "dark": "resources/icons/logout.svg"
@@ -405,7 +405,7 @@
                 {
                     "command": "testbenchExtension.selectAndLoadProject",
                     "group": "navigation@3",
-                    "when": "view == projectManagementTree || view == testThemeTree"
+                    "when": "view == projectManagementTree"
                 },
                 {
                     "command": "testbenchExtension.readAndUploadTestResultsToTestbench",
@@ -415,7 +415,7 @@
                 {
                     "command": "testbenchExtension.showExtensionSettings",
                     "group": "navigation@6",
-                    "when": "view == projectManagementTree || view == testThemeTree"
+                    "when": "view == projectManagementTree"
                 }
             ],
             "view/item/context": [

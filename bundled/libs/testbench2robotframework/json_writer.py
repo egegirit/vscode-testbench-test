@@ -24,7 +24,7 @@ def write_test_structure_element(
     else:
         filepath = Path(json_dir) / Path(f"{test_structure_element.uniqueID}.json")
     with Path(filepath).open('w+', encoding="utf8") as output_file:
-        json.dump(asdict(test_structure_element), output_file, indent=2)
+        json.dump(asdict(test_structure_element), output_file)
 
 
 def write_main_protocol(
@@ -33,7 +33,7 @@ def write_main_protocol(
     protocol = [asdict(tcs) for tcs in main_protocol]
     filepath = Path(json_dir) / Path("protocol.json")
     with Path(filepath).open('w+', encoding="utf8") as output_file:
-        json.dump(protocol, output_file, indent=2)
+        json.dump(protocol, output_file)
 
 
 def write_default_config(config_file):
@@ -42,6 +42,6 @@ def write_default_config(config_file):
             Configuration.from_dict({}).__dict__,
             file,
             default=lambda o: o.__dict__,
-            indent=2,
+
         )
         logger.warning(f"Default Configuration generated to {config_file}")

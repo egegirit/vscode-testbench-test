@@ -147,6 +147,8 @@ export async function fetchZipFile(
  * @param maxPollingTimeMs Maximum time to poll the job status, after which the polling will be stopped
  * @returns Job status response object if the job is completed, otherwise null
  */
+
+// TODO: totalitemcount handled item count in Jobprogress for ReportingJob
 export async function pollJobStatus(
     projectKey: string,
     jobId: string,
@@ -158,6 +160,7 @@ export async function pollJobStatus(
     const startTime = Date.now(); // Start time for the polling to adjust the polling interval after 10 seconds
     let attempt = 0;
     let jobStatus: types.JobStatusResponse | null = null;
+    let lastIncrement = 0;
 
     // Poll the job status until the job is completed with either success or failure
     while (true) {
@@ -181,7 +184,23 @@ export async function pollJobStatus(
                 return null;
             }
 
-            console.log(`Attempt ${attempt}: Job Status fetched.`);
+            let jobStatusResponseTotalItemsCount = jobStatus?.progress?.totalItemsCount;
+            let jobStatusResponseHandledItemsCount = jobStatus?.progress?.handledItemsCount;
+            if (jobStatusResponseTotalItemsCount && jobStatusResponseHandledItemsCount) {
+                let roundedProgressPercentage = Math.round(
+                    (jobStatusResponseHandledItemsCount / jobStatusResponseTotalItemsCount) * 100
+                );
+
+                progress?.report({
+                    message: `Fetching job status (${jobStatusResponseHandledItemsCount}/${jobStatusResponseTotalItemsCount}).`,
+                    increment: (roundedProgressPercentage - lastIncrement) / 3,
+                });
+                console.log(`Attempt ${attempt}: Job Status fetched. Progress: ${roundedProgressPercentage}%`);
+
+                lastIncrement = roundedProgressPercentage;
+            } else {
+                console.log(`Attempt ${attempt}: Job Status fetched.`);
+            }
 
             if (jobType === "report") {
                 if (isReportJobCompletedSuccessfully(jobStatus)) {
@@ -203,7 +222,7 @@ export async function pollJobStatus(
         }
 
         // Update the progress bar, if provided
-        progress?.report({ message: `Fetching job status. Attempt ${attempt}.` });
+        // progress?.report({ message: `Fetching job status. Attempt ${attempt}.` });
 
         // (Optional) Check if the maximum polling time has been exceeded.
         if (maxPollingTimeMs !== undefined) {
@@ -235,7 +254,7 @@ export async function pollJobStatus(
 export async function getJobId(
     projectKey: string,
     cycleKey: string,
-    requestParams?: types.OptionalJobIDRequestParameter
+    requestParams?: types.OptionalJobIDRequestParameter // TODO: Execution mode is added in new branch, project tree is also changed? ExecutionImportingSuccess
 ): Promise<string | null> {
     if (!connection) {
         console.error("Connection object is missing.");
@@ -471,7 +490,7 @@ export async function callFetchReportForTreeElement(
         async (progress, cancellationToken) => {
             try {
                 // Report initial progress
-                progress?.report({ increment: 35, message: "Selecting report parameters." });
+                progress?.report({ increment: 30, message: "Selecting report parameters." });
                 console.log("Fetching report for the selected tree item:", treeItem);
 
                 // Validate the connection
@@ -500,13 +519,14 @@ export async function callFetchReportForTreeElement(
                 const treeElementUniqueID = treeItem.item?.base?.uniqueID;
 
                 // Check if the report should be based on execution
-                const executionBased = await isExecutionBasedReportSelected();
+                const executionBased = true; // await isExecutionBasedReportSelected();  // TODO: Add this later
                 if (executionBased === null) {
                     console.log("Export method is not selected. Fetching report for the selected tree item.");
                     return;
                 }
 
                 // Set up the request parameters
+                // TODO: For now use executionBased, remove selection dialog
                 const cycleStructureOptionsRequestParameter: types.OptionalJobIDRequestParameter = {
                     basedOnExecution: executionBased,
                     treeRootUID: treeElementUniqueID,
@@ -574,7 +594,7 @@ export async function generateTestsWithTestBenchToRobotFramework(
     UIDofTestThemeElementToGenerateTestsFor?: string
 ): Promise<void> {
     try {
-        const executionBased = await isExecutionBasedReportSelected();
+        const executionBased = true; // await isExecutionBasedReportSelected();  // TODO: For QS day, use true for this value.
         if (executionBased === null) {
             vscode.window.showInformationMessage("Test generation aborted.");
             return;
@@ -587,7 +607,7 @@ export async function generateTestsWithTestBenchToRobotFramework(
             return;
         }
 
-        const cycleStructureOptions: types.OptionalJobIDRequestParameter = {
+        const cycleReportOptions: types.OptionalJobIDRequestParameter = {
             basedOnExecution: executionBased,
             treeRootUID: UIDofSelectedElement === "Generate all" ? "" : UIDofSelectedElement,
         };
@@ -607,7 +627,7 @@ export async function generateTestsWithTestBenchToRobotFramework(
                     executionBased,
                     workingDirectory,
                     UIDofSelectedElement,
-                    cycleStructureOptions,
+                    cycleReportOptions,
                     progress,
                     cancellationToken
                 );
@@ -690,7 +710,7 @@ async function runTestGenerationProcess(
     progress: vscode.Progress<{ message?: string; increment?: number }>,
     cancellationToken: vscode.CancellationToken
 ) {
-    progress.report({ increment: 20, message: "Fetching JSON Report from the server." });
+    progress.report({ increment: 30, message: "Fetching JSON Report from the server." });
 
     const downloadedReportZipFilePath = await fetchZipFile(
         baseKey,
@@ -707,7 +727,7 @@ async function runTestGenerationProcess(
         return;
     }
 
-    progress.report({ increment: 20, message: "Generating test cases with testbench2robotframework." });
+    progress.report({ increment: 30, message: "Generating test cases with testbench2robotframework." });
 
     const workspacePath = vscode.workspace.getConfiguration(baseKey).get<string>("workspaceLocation")!;
     const workingDirectoryFullPath = path.join(workspacePath, workingDirectory);
@@ -729,8 +749,8 @@ async function runTestGenerationProcess(
     }
 
     updateLastGeneratedReportParams(UIDofSelectedElement, projectKey, cycleKey, executionBased);
-
     await cleanUp(configFilePath, downloadedReportZipFilePath, baseKey, workingDirectoryFullPath);
+    vscode.commands.executeCommand("workbench.view.extension.test");
 }
 
 /**

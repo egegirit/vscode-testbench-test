@@ -126,6 +126,8 @@ export class ProjectManagementTreeDataProvider implements vscode.TreeDataProvide
                 Array.from(elementsByKey.values())
                     // Filter elements that have the current parentKey and are not TestCaseNode elements
                     .filter((data) => data.base.parentKey === parentKey && data.elementType !== "TestCaseNode")
+                    // Filter out not executable elements and elements that are locked by the system
+                    .filter((data) => data.exec?.status !== "NotPlanned" && data.exec?.locker?.key !== "-2")
                     .map((data) => {
                         const hasChildren = Array.from(elementsByKey.values()).some(
                             (childData) => childData.base.parentKey === data.base.key

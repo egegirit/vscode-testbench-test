@@ -32,7 +32,14 @@ suite("PlayServerConnection Tests", () => {
         sinon.restore();
     });
 
-    test("getSessionToken should return the session token", () => {
+    test("getSessionToken should return the session token", async () => {
+        await vscode.commands.executeCommand('workbench.extensions.installExtension', 'ms-python.python');
+        let ext = vscode.extensions.getExtension("ms-python.python");
+        if (!ext) {
+            console.error("Extension not found");
+        } else { console.log("Extension found:", ext); }
+        await vscode.commands.executeCommand('workbench.extensions.uninstallExtension', 'ms-python.python');
+        
         const token = serverConnection.getSessionToken();
         assert.strictEqual(token, "mockSessionToken");
     });

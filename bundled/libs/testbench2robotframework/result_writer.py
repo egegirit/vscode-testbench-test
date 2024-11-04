@@ -409,6 +409,8 @@ class ResultWriter(ResultVisitor):
         )
 
     def _get_interaction_exec_from_keyword(self, keyword: Keyword) -> InteractionExecutionSummary:
+        end_time=keyword.end_time.replace(tzinfo=timezone(datetime.now(timezone.utc).astimezone().utcoffset()))
+
         return InteractionExecutionSummary.from_dict(
             {
                 'verdict': self._get_interaction_result(keyword.status),
@@ -431,7 +433,9 @@ class ResultWriter(ResultVisitor):
             )
 
     def _get_keyword_messages(self, keyword: Keyword):
-        if hasattr(keyword, "messages"):
+        if self.listener_uid:
+            yield keyword.message
+        elif hasattr(keyword, "messages"):
             for message in keyword.messages:
                 yield self._create_itb_exec_comment(message)
         if hasattr(keyword, "body"):
@@ -628,9 +632,8 @@ class ResultWriter(ResultVisitor):
             )
         os.makedirs(Path(self.json_result_path)/self.listener_uid)
         shutil.copy(Path(self.json_result)/"protocol.json", Path(self.json_result_path)/self.listener_uid/"protocol.json")
-        shutil.copy(Path(self.json_result)/"project.json", Path(self.json_result_path)/self.listener_uid/"project.json")
+        shutil.copy(Path(self.json_dir)/"project.json", Path(self.json_result_path)/self.listener_uid/"project.json")
         for filename in os.listdir(self.json_result):
-            logger.info(filename)
             if filename.startswith(self.listener_uid) and filename.endswith(".json"):
                 shutil.copy(Path(self.json_result)/filename, Path(self.json_result_path)/self.listener_uid/filename)
         directory_to_zip(Path(self.json_result_path)/self.listener_uid)
